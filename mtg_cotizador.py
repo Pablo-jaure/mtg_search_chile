@@ -165,6 +165,7 @@ async def actualizar_precios_shopify(client, resultados: list) -> list:
             variante = min(disponibles, key=lambda v: int(v["price"]))
             resultado["Precio"] = round(int(variante["price"]) / 100)
             resultado["Stock Verificado"] = True
+            resultado["Shopify Variant ID"] = str(variante["id"])
             nombre_variante = variante.get("title", "").strip()
             if nombre_variante and nombre_variante.lower() != "default title":
                 resultado["Producto Encontrado"] += f" — {nombre_variante}"
@@ -187,23 +188,33 @@ def _objetos_json(valor):
             yield from _objetos_json(hijo)
 
 
-def _stock_y_precio_ficha(html: str) -> tuple[bool | None, int | None]:
+def _stock_y_precio_ficha(html: str) -> tuple[bool | None, int | None, dict | None]:
     """Obtiene disponibilidad y menor precio con stock desde una ficha HTML."""
     soup = BeautifulSoup(html, "html.parser")
-    precios_stock = []
+    ofertas_stock = []
     vio_stock_explicito = False
+    cart_el = soup.select_one(
+        "a.cart-contents[href], a[href*='/carrito/'], a[href*='/cart/']"
+    )
+    cart_url = cart_el.get("href") if cart_el is not None else None
 
     # Variantes WooCommerce: el atributo contiene stock y precio por variante.
     for formulario in soup.select("form.variations_form[data-product_variations]"):
         try:
             variantes = json.loads(formulario.get("data-product_variations", "[]"))
+            product_id = formulario.get("data-product_id")
             for variante in variantes:
                 vio_stock_explicito = True
                 disponible = variante.get("is_in_stock") and variante.get("is_purchasable", True)
                 if disponible:
                     precio = parse_precio(variante.get("display_price", ""))
                     if precio:
-                        precios_stock.append(precio)
+                        ofertas_stock.append((precio, {
+                            "product_id": str(product_id or variante.get("product_id", "")),
+                            "variation_id": str(variante.get("variation_id", "")),
+                            "attributes": variante.get("attributes") or {},
+                            "cart_url": cart_url,
+                        }))
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -224,34 +235,57 @@ def _stock_y_precio_ficha(html: str) -> tuple[bool | None, int | None]:
             if disponible:
                 precio = parse_precio(objeto.get("price") or objeto.get("lowPrice") or "")
                 if precio:
-                    precios_stock.append(precio)
+                    ofertas_stock.append((precio, None))
 
-    if precios_stock:
-        return True, min(precios_stock)
+    if ofertas_stock:
+        comprables = [oferta for oferta in ofertas_stock if oferta[1] and oferta[1].get("product_id")]
+        precio, compra = min(comprables or ofertas_stock, key=lambda oferta: oferta[0])
+        if compra and compra.get("variation_id"):
+            return True, precio, compra
+        # Un producto simple expone su ID en el formulario o botón de compra.
+        id_el = soup.select_one(
+            "form.cart [name='add-to-cart'][value], "
+            "button[name='add-to-cart'][value], [data-product_id]"
+        )
+        product_id = None
+        if id_el is not None:
+            product_id = id_el.get("value") or id_el.get("data-product_id")
+        compra_simple = {"product_id": str(product_id), "cart_url": cart_url} if product_id else None
+        return True, precio, compra_simple
     if vio_stock_explicito:
-        return False, None
+        return False, None, None
 
     # Metadatos y controles de compra como respaldo cuando no hay JSON público.
     disponibilidad = soup.select_one(
         "meta[property='product:availability'], [itemprop='availability'], .stock"
     )
-    if disponibilidad:
+    if disponibilidad is not None:
         estado = " ".join(filter(None, [
             disponibilidad.get("content"), disponibilidad.get("href"),
             disponibilidad.get_text(" ", strip=True),
         ])).lower()
         if any(x in estado for x in ("outofstock", "out-of-stock", "agotado", "sin existencias", "sin stock")):
-            return False, None
-        if any(x in estado for x in ("instock", "in-stock", "hay existencias", "disponible")):
+            return False, None, None
+        if any(x in estado for x in ("instock", "in-stock", "in stock", "hay existencias", "disponible")):
             precio_meta = soup.select_one("meta[property='product:price:amount'], [itemprop='price']")
-            precio = parse_precio(precio_meta.get("content", "")) if precio_meta else None
-            return True, precio
+            precio = parse_precio(precio_meta.get("content", "")) if precio_meta is not None else None
+            id_el = soup.select_one(
+                "form.cart [name='add-to-cart'][value], "
+                "button[name='add-to-cart'][value], [data-product_id]"
+            )
+            product_id = (id_el.get("value") or id_el.get("data-product_id")) if id_el is not None else None
+            compra = {"product_id": str(product_id), "cart_url": cart_url} if product_id else None
+            return True, precio, compra
 
     boton = soup.select_one(
         "button[name='add-to-cart']:not([disabled]), .single_add_to_cart_button:not(.disabled), "
         "input[name='add_to_cart']:not([disabled])"
     )
-    return (True, None) if boton else (None, None)
+    if boton is not None:
+        product_id = boton.get("value") or boton.get("data-product_id")
+        compra = {"product_id": str(product_id), "cart_url": cart_url} if product_id else None
+        return True, None, compra
+    return None, None, None
 
 
 async def verificar_fichas_html(client, resultados: list) -> tuple[list, int, int]:
@@ -264,7 +298,7 @@ async def verificar_fichas_html(client, resultados: list) -> tuple[list, int, in
                 inconclusos += 1
                 verificados.append(resultado)
                 continue
-            stock, precio = _stock_y_precio_ficha(respuesta.text)
+            stock, precio, compra = _stock_y_precio_ficha(respuesta.text)
             if stock is False:
                 descartados += 1
                 continue
@@ -274,6 +308,8 @@ async def verificar_fichas_html(client, resultados: list) -> tuple[list, int, in
                 resultado["Stock Verificado"] = True
             if precio:
                 resultado["Precio"] = precio
+            if compra and compra.get("product_id"):
+                resultado["WooCommerce Compra"] = compra
             verificados.append(resultado)
         except Exception:
             inconclusos += 1

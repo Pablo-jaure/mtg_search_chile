@@ -75,8 +75,30 @@
 
         <div class="tab-pane fade" id="tiendas">
           {% if resumen %}<div class="table-responsive"><table class="table table-striped align-middle">
-            <thead><tr><th>Tienda</th><th>Cartas con stock</th><th>Precio mínimo</th><th>Precio promedio</th><th>Resultados</th></tr></thead>
-            <tbody>{% for fila in resumen %}<tr><td>{{ fila.tienda }}</td><td>{{ fila.cartas }}</td><td>${{ '{:,.0f}'.format(fila.minimo).replace(',', '.') }}</td><td>${{ '{:,.0f}'.format(fila.promedio).replace(',', '.') }}</td><td>{{ fila.resultados }}</td></tr>{% endfor %}</tbody>
+            <thead><tr><th>Tienda</th><th>Cartas con stock</th><th>Precio mínimo</th><th>Precio promedio</th><th>Resultados</th><th></th></tr></thead>
+            <tbody>{% for fila in resumen %}<tr>
+              <td>{{ fila.tienda }}</td><td>{{ fila.cartas }}</td>
+              <td>${{ '{:,.0f}'.format(fila.minimo).replace(',', '.') }}</td>
+              <td>${{ '{:,.0f}'.format(fila.promedio).replace(',', '.') }}</td>
+              <td>{{ fila.resultados }}</td>
+              <td class="text-end">
+                {% if fila.plataforma_carrito == 'shopify' %}
+                <a class="btn btn-sm btn-success text-nowrap" href="{{ fila.carrito_url }}" target="_blank" rel="noopener">
+                  🛒 Agregar {{ fila.carrito_cartas }} al carrito
+                </a>
+                <div class="small text-muted mt-1">Total estimado: ${{ '{:,.0f}'.format(fila.carrito_total).replace(',', '.') }}</div>
+                {% elif fila.plataforma_carrito == 'woocommerce' %}
+                <button class="btn btn-sm btn-success text-nowrap" type="button"
+                        data-add-urls='{{ fila.carrito_urls|tojson }}'
+                        data-cart-url="{{ fila.carrito_url }}"
+                        onclick="abrirCarritoWoo(this)">
+                  🛒 Agregar {{ fila.carrito_cartas }} al carrito
+                </button>
+                <div class="small text-muted mt-1">Total estimado: ${{ '{:,.0f}'.format(fila.carrito_total).replace(',', '.') }}</div>
+                {% if fila.carrito_omitidas %}<div class="small text-warning">{{ fila.carrito_omitidas }} carta(s) requieren agregado manual</div>{% endif %}
+                {% endif %}
+              </td>
+            </tr>{% endfor %}</tbody>
           </table></div>{% else %}<div class="alert alert-secondary">No se encontraron resultados.</div>{% endif %}
         </div>
 
@@ -97,6 +119,31 @@
 </main>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+  function abrirCarritoWoo(button) {
+    const urls = JSON.parse(button.dataset.addUrls);
+    const cartUrl = button.dataset.cartUrl;
+    const original = button.innerHTML;
+    const tienda = window.open('about:blank', 'woocommerce-cart');
+    if (!tienda) {
+      alert('Permite ventanas emergentes para agregar las cartas al carrito.');
+      return;
+    }
+    button.disabled = true;
+    let indice = 0;
+    const siguiente = () => {
+      if (indice < urls.length) {
+        button.textContent = `Agregando ${indice + 1} de ${urls.length}…`;
+        tienda.location.href = urls[indice++];
+        window.setTimeout(siguiente, 2500);
+      } else {
+        button.innerHTML = original;
+        button.disabled = false;
+        tienda.location.href = cartUrl;
+      }
+    };
+    siguiente();
+  }
+
   document.getElementById('quote-form').addEventListener('submit', () => {
     const button = document.getElementById('submit-button');
     button.disabled = true;

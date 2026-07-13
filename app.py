@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from urllib.parse import urlencode, urljoin, urlsplit
 
 from flask import Flask, render_template, request
 
@@ -45,13 +46,76 @@ def crear_resumen_tiendas(resultados):
 
     resumen = []
     for tienda, dato in agrupados.items():
-        resumen.append({
+        fila_resumen = {
             "tienda": tienda,
             "cartas": len(dato["cartas"]),
             "minimo": min(dato["precios"]),
             "promedio": round(sum(dato["precios"]) / len(dato["precios"])),
             "resultados": dato["resultados"],
-        })
+        }
+
+        # Un carrito Shopify acepta variantes como /cart/ID:cantidad. Para no
+        # agregar todas las ediciones encontradas, se elige la más barata con
+        # stock de cada carta buscada dentro de esta tienda.
+        candidatas = [
+            fila for fila in resultados
+            if fila["Tienda"] == tienda and fila.get("Shopify Variant ID")
+        ]
+        if candidatas:
+            mejores = {}
+            for fila in candidatas:
+                carta = fila["Carta Buscada"]
+                if carta not in mejores or fila["Precio"] < mejores[carta]["Precio"]:
+                    mejores[carta] = fila
+            seleccionadas = list(mejores.values())
+            partes = urlsplit(seleccionadas[0]["Link"])
+            variantes = ",".join(
+                f'{fila["Shopify Variant ID"]}:1' for fila in seleccionadas
+            )
+            fila_resumen.update(
+                plataforma_carrito="shopify",
+                carrito_url=f"{partes.scheme}://{partes.netloc}/cart/{variantes}",
+                carrito_cartas=len(seleccionadas),
+                carrito_total=sum(fila["Precio"] for fila in seleccionadas),
+            )
+
+        candidatas_woo = [
+            fila for fila in resultados
+            if fila["Tienda"] == tienda and fila.get("WooCommerce Compra")
+        ]
+        if candidatas_woo:
+            mejores = {}
+            for fila in candidatas_woo:
+                carta = fila["Carta Buscada"]
+                if carta not in mejores or fila["Precio"] < mejores[carta]["Precio"]:
+                    mejores[carta] = fila
+            seleccionadas = list(mejores.values())
+            partes = urlsplit(seleccionadas[0]["Link"])
+            base_url = f"{partes.scheme}://{partes.netloc}"
+            urls_agregar = []
+            for fila in seleccionadas:
+                compra = fila["WooCommerce Compra"]
+                parametros = {
+                    "add-to-cart": compra["product_id"],
+                    "quantity": 1,
+                }
+                if compra.get("variation_id"):
+                    parametros["variation_id"] = compra["variation_id"]
+                    parametros.update(compra.get("attributes") or {})
+                urls_agregar.append(f"{base_url}/?{urlencode(parametros)}")
+            fila_resumen.update(
+                plataforma_carrito="woocommerce",
+                carrito_urls=urls_agregar,
+                carrito_url=urljoin(
+                    base_url,
+                    seleccionadas[0]["WooCommerce Compra"].get("cart_url") or "/cart/",
+                ),
+                carrito_cartas=len(seleccionadas),
+                carrito_total=sum(fila["Precio"] for fila in seleccionadas),
+                carrito_omitidas=len(dato["cartas"]) - len(seleccionadas),
+            )
+
+        resumen.append(fila_resumen)
     return sorted(resumen, key=lambda item: (-item["cartas"], item["tienda"]))
 
 
