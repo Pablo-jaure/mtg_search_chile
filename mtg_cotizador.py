@@ -96,7 +96,15 @@ def es_match(buscado: str, encontrado: str) -> bool:
 
 
 def parse_precio(texto: str) -> int | None:
-    d = "".join(filter(str.isdigit, texto))
+    texto = str(texto).strip()
+    # Un número JSON como 8400.00 usa punto decimal; un precio chileno como
+    # $8.400 usa el punto como separador de miles.
+    if re.fullmatch(r"\d+[.,]\d{2}", texto):
+        return round(float(texto.replace(",", ".")))
+    coincidencias = re.findall(r"\d[\d.]*", texto)
+    if not coincidencias:
+        return None
+    d = coincidencias[-1].replace(".", "")
     return int(d) if len(d) >= 3 else None
 
 
@@ -134,6 +142,143 @@ def parse_shopify_json(r, carta, nombre_tienda, url) -> tuple[list, str]:
         })
     diag = f"✅ {len(resultados)} resultado(s)" if resultados else "Sin stock"
     return resultados, diag
+
+
+async def actualizar_precios_shopify(client, resultados: list) -> list:
+    """Reemplaza el precio base de búsqueda por el menor precio con stock real.
+
+    Shopify Search entrega el mínimo histórico de todas las variantes, incluyendo
+    variantes agotadas. El endpoint público ``producto.js`` contiene el stock y
+    el precio vigente (en centavos) de cada variante.
+    """
+    actualizados = []
+    for resultado in resultados:
+        try:
+            producto_url = resultado["Link"].split("?", 1)[0].rstrip("/") + ".js"
+            respuesta = await client.get(producto_url, headers=HEADERS, timeout=10.0)
+            respuesta.raise_for_status()
+            variantes = respuesta.json().get("variants", [])
+            disponibles = [v for v in variantes if v.get("available") and v.get("price") is not None]
+            if not disponibles:
+                continue
+
+            variante = min(disponibles, key=lambda v: int(v["price"]))
+            resultado["Precio"] = round(int(variante["price"]) / 100)
+            resultado["Stock Verificado"] = True
+            nombre_variante = variante.get("title", "").strip()
+            if nombre_variante and nombre_variante.lower() != "default title":
+                resultado["Producto Encontrado"] += f" — {nombre_variante}"
+            actualizados.append(resultado)
+        except Exception:
+            # Si una tienda bloquea el endpoint de variantes, se conserva el
+            # resultado de búsqueda para no perder completamente el producto.
+            actualizados.append(resultado)
+    return actualizados
+
+
+def _objetos_json(valor):
+    """Recorre diccionarios/listas de JSON-LD sin asumir una estructura fija."""
+    if isinstance(valor, dict):
+        yield valor
+        for hijo in valor.values():
+            yield from _objetos_json(hijo)
+    elif isinstance(valor, list):
+        for hijo in valor:
+            yield from _objetos_json(hijo)
+
+
+def _stock_y_precio_ficha(html: str) -> tuple[bool | None, int | None]:
+    """Obtiene disponibilidad y menor precio con stock desde una ficha HTML."""
+    soup = BeautifulSoup(html, "html.parser")
+    precios_stock = []
+    vio_stock_explicito = False
+
+    # Variantes WooCommerce: el atributo contiene stock y precio por variante.
+    for formulario in soup.select("form.variations_form[data-product_variations]"):
+        try:
+            variantes = json.loads(formulario.get("data-product_variations", "[]"))
+            for variante in variantes:
+                vio_stock_explicito = True
+                disponible = variante.get("is_in_stock") and variante.get("is_purchasable", True)
+                if disponible:
+                    precio = parse_precio(variante.get("display_price", ""))
+                    if precio:
+                        precios_stock.append(precio)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Schema.org / JSON-LD funciona en WooCommerce, Jumpseller y varios temas.
+    for script in soup.select("script[type='application/ld+json']"):
+        try:
+            data = json.loads(script.string or script.get_text())
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for objeto in _objetos_json(data):
+            tipo = objeto.get("@type", "")
+            if tipo not in ("Offer", "AggregateOffer"):
+                continue
+            disponibilidad = str(objeto.get("availability", "")).lower()
+            if disponibilidad:
+                vio_stock_explicito = True
+            disponible = "instock" in disponibilidad or "limitedavailability" in disponibilidad
+            if disponible:
+                precio = parse_precio(objeto.get("price") or objeto.get("lowPrice") or "")
+                if precio:
+                    precios_stock.append(precio)
+
+    if precios_stock:
+        return True, min(precios_stock)
+    if vio_stock_explicito:
+        return False, None
+
+    # Metadatos y controles de compra como respaldo cuando no hay JSON público.
+    disponibilidad = soup.select_one(
+        "meta[property='product:availability'], [itemprop='availability'], .stock"
+    )
+    if disponibilidad:
+        estado = " ".join(filter(None, [
+            disponibilidad.get("content"), disponibilidad.get("href"),
+            disponibilidad.get_text(" ", strip=True),
+        ])).lower()
+        if any(x in estado for x in ("outofstock", "out-of-stock", "agotado", "sin existencias", "sin stock")):
+            return False, None
+        if any(x in estado for x in ("instock", "in-stock", "hay existencias", "disponible")):
+            precio_meta = soup.select_one("meta[property='product:price:amount'], [itemprop='price']")
+            precio = parse_precio(precio_meta.get("content", "")) if precio_meta else None
+            return True, precio
+
+    boton = soup.select_one(
+        "button[name='add-to-cart']:not([disabled]), .single_add_to_cart_button:not(.disabled), "
+        "input[name='add_to_cart']:not([disabled])"
+    )
+    return (True, None) if boton else (None, None)
+
+
+async def verificar_fichas_html(client, resultados: list) -> tuple[list, int, int]:
+    """Valida stock en fichas WooCommerce/Jumpseller y actualiza su precio."""
+    verificados, descartados, inconclusos = [], 0, 0
+    for resultado in resultados:
+        try:
+            respuesta = await client.get(resultado["Link"], headers=HEADERS, timeout=12.0)
+            if respuesta.status_code != 200:
+                inconclusos += 1
+                verificados.append(resultado)
+                continue
+            stock, precio = _stock_y_precio_ficha(respuesta.text)
+            if stock is False:
+                descartados += 1
+                continue
+            if stock is None:
+                inconclusos += 1
+            else:
+                resultado["Stock Verificado"] = True
+            if precio:
+                resultado["Precio"] = precio
+            verificados.append(resultado)
+        except Exception:
+            inconclusos += 1
+            verificados.append(resultado)
+    return verificados, descartados, inconclusos
 
 
 def parse_shopify_html_fallback(html: str, carta, nombre_tienda, base_url) -> tuple[list, str]:
@@ -318,6 +463,12 @@ def parse_scry_marketplace(r, carta, nombre_tienda, url) -> tuple[list, str]:
     resultados = []
     dom = "marketplace.scry.cl"
     for prod in prods:
+        clases = " ".join(prod.get("class", [])).lower()
+        texto_stock = prod.get_text(" ", strip=True).lower()
+        if any(x in clases or x in texto_stock for x in (
+            "outofstock", "out-of-stock", "agotado", "sin stock", "vendido"
+        )):
+            continue
         txt_completo = prod.get_text(" ", strip=True)
         if not es_match(carta, txt_completo): continue
 
@@ -371,6 +522,9 @@ async def buscar_en_tienda(client, sem, nombre_tienda, config, carta, callback=N
 
             if tipo == "shopify_api":
                 resultados, diag = parse_shopify_json(r, carta, nombre_tienda, url)
+                if resultados:
+                    resultados = await actualizar_precios_shopify(client, resultados)
+                    diag = f"✅ {len(resultados)} resultado(s) con stock verificado"
                 # Fallback HTML automático cuando Cloudflare bloquea el JSON
                 if "Cloudflare" in diag:
                     fallback_url = f"https://{dominio(url)}/search?type=product&q={carta.replace(' ', '+')}"
@@ -383,8 +537,16 @@ async def buscar_en_tienda(client, sem, nombre_tienda, config, carta, callback=N
                         diag = f"🚨 Cloudflare + fallback falló: {e}"
             elif tipo == "woocommerce":
                 resultados, diag = parse_woocommerce(r, carta, nombre_tienda, url)
+                if resultados:
+                    resultados, fuera_stock, inconclusos = await verificar_fichas_html(client, resultados)
+                    diag = (f"✅ {len(resultados)} resultado(s); {fuera_stock} sin stock descartado(s)"
+                            f"; {inconclusos} no concluyente(s)")
             elif tipo == "jumpseller":
                 resultados, diag = parse_jumpseller(r, carta, nombre_tienda, url)
+                if resultados:
+                    resultados, fuera_stock, inconclusos = await verificar_fichas_html(client, resultados)
+                    diag = (f"✅ {len(resultados)} resultado(s); {fuera_stock} sin stock descartado(s)"
+                            f"; {inconclusos} no concluyente(s)")
             elif tipo == "scry_marketplace":
                 resultados, diag = parse_scry_marketplace(r, carta, nombre_tienda, url)
             else:
