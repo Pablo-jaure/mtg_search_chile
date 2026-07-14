@@ -1,6 +1,9 @@
 .venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
 .env
-.idea/
+.env.*
 .vscode/
+Archivo_nuevo.txt
+logdeconstrseñas.py
