@@ -34,5 +34,6 @@ gunicorn app:app
 La aplicación también respeta la variable `PORT` cuando se inicia directamente
 con `python app.py`.
 
-GitHub Actions valida cada pull request y cada cambio en `main`. Render espera
-que esos checks terminen correctamente antes de desplegar automáticamente.
+GitHub Actions valida cada pull request y cada cambio en `main`. Si los checks
+de `main` terminan correctamente, el job de despliegue inicia una nueva versión
+en Render mediante su API.
