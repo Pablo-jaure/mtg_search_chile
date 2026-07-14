@@ -21,3 +21,15 @@ python app.py
 ```
 
 Pega una lista como `4x Lightning Bolt`, inicia la cotización y revisa resultados por carta, tienda y diagnóstico.
+
+## Despliegue en Render
+
+El repositorio incluye un `render.yaml` para desplegar la interfaz Flask como
+servicio web. Render instala `requirements.txt` y ejecuta:
+
+```text
+gunicorn app:app
+```
+
+La aplicación también respeta la variable `PORT` cuando se inicia directamente
+con `python app.py`.
