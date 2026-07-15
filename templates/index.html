@@ -17,12 +17,31 @@
   <div class="search-panel">
     <form method="post" id="quote-form" data-submit-loading data-loading-target="#search-loading">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="form-label" for="card-list">Lista de cartas</label>
-      <textarea class="form-control font-monospace search-textarea" id="card-list" name="lista" rows="8" required aria-describedby="card-list-help">{{ lista }}</textarea>
-      <div class="search-actions">
-        <div class="format-help" id="card-list-help">
-          Una carta por línea. Acepta <code>4x Lightning Bolt</code>, listas de Arena, MTGO y Moxfield. Máximo 100 cartas distintas.
+      <div class="card-builder" data-card-builder data-max-cards="100" data-initial-cards='{{ initial_cards|tojson }}'>
+        <label class="form-label" for="card-search-input">Agregar una carta</label>
+        <div class="card-builder__controls">
+          <div class="card-autocomplete" data-card-autocomplete>
+            <input class="form-control" id="card-search-input" type="search" placeholder="Ej: Lightning Bolt" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-card-suggestions" aria-describedby="card-list-help" data-autocomplete-input>
+            <div class="autocomplete-menu" id="search-card-suggestions" role="listbox" data-autocomplete-menu hidden></div>
+            <span class="visually-hidden" role="status" aria-live="polite" data-autocomplete-status></span>
+          </div>
+          <button class="btn btn-outline-primary" type="button" data-add-card><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar</button>
         </div>
+        <input type="hidden" id="card-list" name="lista" value="{{ lista }}" data-card-list-value>
+        <div class="selected-cards" data-selected-cards aria-live="polite"></div>
+        <p class="format-help mb-0" id="card-list-help">Escribe un nombre y elige una sugerencia, o agrega el texto libremente. Máximo 100 cartas distintas.</p>
+        <details class="bulk-import mt-3">
+          <summary>Pegar una lista de Arena, MTGO o Moxfield</summary>
+          <div class="mt-2">
+            <label class="form-label small" for="bulk-card-list">Lista para importar</label>
+            <textarea class="form-control font-monospace search-textarea" id="bulk-card-list" rows="6" placeholder="Lightning Bolt&#10;4x Counterspell&#10;Sol Ring (CMM) 396" data-bulk-card-list></textarea>
+            <button class="btn btn-sm btn-outline-primary mt-2" type="button" data-import-cards><i class="bi bi-clipboard-plus" aria-hidden="true"></i> Importar cartas</button>
+          </div>
+        </details>
+        <span class="form-text text-danger" role="alert" data-card-builder-error></span>
+      </div>
+      <div class="search-actions">
+        <div class="format-help">Las cantidades de listas antiguas se ignoran: solo buscaremos cada nombre una vez.</div>
         <button class="btn btn-primary btn-lg search-submit" id="submit-button" type="submit" data-loading-label="Cotizando…">
           <i class="bi bi-search" aria-hidden="true"></i> <span data-button-label>Buscar mejores precios</span>
         </button>
@@ -153,7 +172,7 @@
           </article>
         {% endfor %}
         </div>
-      {% else %}{{ empty_state('bi-shop', 'No encontramos tiendas con stock', 'Prueba ajustando los nombres o revisa que cada carta esté escrita en una línea.', '#card-list', 'Editar lista') }}{% endif %}
+      {% else %}{{ empty_state('bi-shop', 'No encontramos tiendas con stock', 'Prueba ajustando los nombres o revisa la lista de cartas.', '#card-search-input', 'Editar lista') }}{% endif %}
     </div>
 
     <div class="tab-pane fade" id="diagnostico" role="tabpanel">

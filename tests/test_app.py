@@ -34,8 +34,8 @@ class FakeSupabase:
     def get_search_detail(self, *_):
         return {"run": {"id": "run-1", "created_at": "2026-07-15T00:00:00Z", "query_text": "1x Bolt", "status": "completed", "card_count": 1, "result_count": 0}, "cards": []}
     def get_cart_history(self, *_): return []
-    def save_wishlist_item(self, token, user_id, name, quantity, notes):
-        self.saved.append({"id": "item-1", "card_name": name, "desired_quantity": int(quantity), "notes": notes})
+    def save_wishlist_item(self, token, user_id, name, notes):
+        self.saved.append({"id": "item-1", "card_name": name, "desired_quantity": 1, "notes": notes})
     def update_wishlist_item(self, token, user_id, item_id, *, acquired):
         self.updated_wishlist = {"id": item_id, "acquired": acquired}
     def configure_wishlist_price_alert(self, token, item_id, target, enabled):
@@ -65,6 +65,30 @@ def test_public_quote_page_and_protected_area(monkeypatch):
     client = module.app.test_client()
     assert client.get("/").status_code == 200
     assert client.get("/wishlist").status_code == 302
+
+
+def test_search_builder_starts_empty_and_prefills_legacy_links(monkeypatch):
+    monkeypatch.setattr(module, "supabase", FakeSupabase())
+    client = module.app.test_client()
+
+    empty = BeautifulSoup(client.get("/").data, "html.parser")
+    assert json.loads(empty.select_one("[data-card-builder]")["data-initial-cards"]) == []
+    assert empty.select_one('input[name="lista"]')["value"] == ""
+
+    prefilled = BeautifulSoup(
+        client.get("/?cards=1x%20Lightning%20Bolt%0ACounterspell").data,
+        "html.parser",
+    )
+    assert json.loads(prefilled.select_one("[data-card-builder]")["data-initial-cards"]) == [
+        "Lightning Bolt", "Counterspell"
+    ]
+    assert prefilled.select_one('input[name="lista"]')["value"] == "Lightning Bolt\nCounterspell"
+
+
+def test_bulk_parser_accepts_names_and_legacy_quantities():
+    assert module.parsear_lista_bulk(
+        "Lightning Bolt\n4x Counterspell\n2 Sol Ring (CMM) 396\nlightning bolt"
+    ) == ["Lightning Bolt", "Counterspell", "Sol Ring"]
 
 
 def test_static_assets_skip_remote_auth_and_are_cacheable(monkeypatch):
@@ -153,6 +177,18 @@ def test_authenticated_wishlist(monkeypatch):
     response = client.post("/wishlist", data={"csrf_token": token, "card_name": "Lightning Bolt", "desired_quantity": 2})
     assert response.status_code == 302
     assert store.saved[0]["card_name"] == "Lightning Bolt"
+    assert store.saved[0]["desired_quantity"] == 1
+
+
+def test_wishlist_form_has_autocomplete_without_quantity(monkeypatch):
+    monkeypatch.setattr(module, "supabase", FakeSupabase())
+    client = module.app.test_client()
+    logged_in(client)
+    soup = BeautifulSoup(client.get("/wishlist").data, "html.parser")
+
+    assert soup.select_one("#wishlist-card-name[data-autocomplete-input]") is not None
+    assert soup.select_one("#wishlist-card-suggestions[role='listbox']") is not None
+    assert soup.select_one('[name="desired_quantity"]') is None
 
 
 def test_authenticated_user_can_mark_wishlist_item(monkeypatch):
@@ -265,8 +301,13 @@ def test_frontend_assets_and_accessibility_hooks(monkeypatch):
     assert b'Saltar al contenido' in response.data
     assert b'data-submit-loading' in response.data
     assert b'Buscando en tiendas chilenas' in response.data
+    assert b'role="combobox"' in response.data
+    assert b'data-selected-cards' in response.data
     assert client.get("/static/css/app.css").status_code == 200
-    assert client.get("/static/js/app.js").status_code == 200
+    javascript = client.get("/static/js/app.js")
+    assert javascript.status_code == 200
+    assert b"api.scryfall.com/cards/autocomplete" in javascript.data
+    assert b"setTimeout(loadSuggestions, 250)" in javascript.data
 
 
 def test_rendered_post_forms_keep_csrf_tokens(monkeypatch):

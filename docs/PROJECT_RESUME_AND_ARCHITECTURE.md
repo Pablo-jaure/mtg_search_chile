@@ -50,7 +50,7 @@
 
 ### Data Flow
 
-1. **User inputs** a list of cards (plain text, supports Arena/MTGO/Moxfield formats)
+1. **User builds** a quantity-free card list with Scryfall autocomplete, or imports an Arena/MTGO/Moxfield list
 2. **Flask** parses the list and triggers `asyncio.run(cotizar_web())`
 3. **Scraping engine** runs up to 8 store searches concurrently → one HTTP request per (card × store) pair → up to `23 × N` requests
 4. **Each scraper** (Shopify JSON / WooCommerce HTML / Jumpseller / Scry) extracts matching products, prices, and links
@@ -145,7 +145,7 @@
 
 | Function | Purpose |
 |---|---|
-| `parsear_lista_bulk()` | Parses raw text into deduplicated card names (Arena/MTGO/Moxfield formats) |
+| `parsear_lista_bulk()` | Parses raw text into deduplicated card names; legacy quantities are accepted and ignored |
 | `es_match()` | Fuzzy card name matching between searched and found product title |
 | `parse_precio()` | Converts CLP price strings (with/without dots/commas) to integers |
 | `buscar_en_tienda()` | Main async scraper: dispatches to the right parser based on store type |
@@ -197,7 +197,7 @@ A thin client wrapping the Supabase REST API (`/rest/v1/*` and `/auth/v1/*`).
 - Returns cheapest offer for a given card name
 
 ### 5.2 Wishlist with Alerts
-- Users can save cards they're looking for
+- Users can save quantity-free card entries with Scryfall name autocomplete
 - Optional price alert: when the cheapest offer drops below a target, a notification is triggered
 - Price alert deliveries tracked in the database
 

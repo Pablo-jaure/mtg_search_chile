@@ -38,3 +38,19 @@ def test_configure_price_alert_uses_authenticated_rpc(monkeypatch):
     assert captured["path"] == "/rest/v1/rpc/configure_wishlist_price_alert"
     assert captured["token"] == "jwt"
     assert captured["json"]["p_target_price_clp"] == 1500
+
+
+def test_wishlist_storage_keeps_legacy_quantity_at_one(monkeypatch):
+    store = SupabaseStore(SupabaseConfig("https://x", "public", "secret"))
+    captured = {}
+
+    def fake_request(method, path, **kwargs):
+        captured.update(method=method, path=path, **kwargs)
+        return [{"id": "item-1"}]
+
+    monkeypatch.setattr(store, "_request", fake_request)
+    store.save_wishlist_item("jwt", "user-1", " Lightning Bolt ", "  Foil  ")
+
+    assert captured["json"]["desired_quantity"] == 1
+    assert captured["json"]["card_name"] == "Lightning Bolt"
+    assert captured["json"]["notes"] == "Foil"

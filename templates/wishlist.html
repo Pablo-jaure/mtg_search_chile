@@ -9,9 +9,15 @@
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="row g-3 align-items-end">
-      <div class="col-md-5"><label class="form-label" for="wishlist-card-name">Nombre de la carta</label><input class="form-control" id="wishlist-card-name" name="card_name" placeholder="Ej: Lightning Bolt" required></div>
-      <div class="col-sm-4 col-md-2"><label class="form-label" for="wishlist-quantity">Cantidad</label><input class="form-control" id="wishlist-quantity" type="number" min="1" max="999" name="desired_quantity" value="1"></div>
-      <div class="col-sm-8 col-md-3"><label class="form-label" for="wishlist-notes">Notas <span class="fw-normal text-secondary">(opcional)</span></label><input class="form-control" id="wishlist-notes" name="notes" maxlength="1000" placeholder="Edición, condición…"></div>
+      <div class="col-md-6">
+        <label class="form-label" for="wishlist-card-name">Nombre de la carta</label>
+        <div class="card-autocomplete" data-card-autocomplete>
+          <input class="form-control" id="wishlist-card-name" name="card_name" placeholder="Ej: Lightning Bolt" autocomplete="off" required role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="wishlist-card-suggestions" data-autocomplete-input>
+          <div class="autocomplete-menu" id="wishlist-card-suggestions" role="listbox" data-autocomplete-menu hidden></div>
+          <span class="visually-hidden" role="status" aria-live="polite" data-autocomplete-status></span>
+        </div>
+      </div>
+      <div class="col-md-4"><label class="form-label" for="wishlist-notes">Notas <span class="fw-normal text-secondary">(opcional)</span></label><input class="form-control" id="wishlist-notes" name="notes" maxlength="1000" placeholder="Edición, condición…"></div>
       <div class="col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar</button></div>
     </div>
   </form>
@@ -27,7 +33,6 @@
       <div>
         <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
           <h2 class="h5 mb-0 {% if item.acquired %}text-decoration-line-through{% endif %}">{{ item.card_name }}</h2>
-          {{ status_badge(item.desired_quantity ~ ' unidad(es)', 'neutral') }}
           {% if item.acquired %}{{ status_badge('Obtenida', 'success', 'bi-check-circle') }}
           {% elif not item.target_price_clp %}{{ status_badge('Sin objetivo', 'neutral', 'bi-dash-circle') }}
           {% elif delivery and delivery.status == 'failed' %}{{ status_badge('Correo fallido', 'danger', 'bi-exclamation-octagon') }}
@@ -46,7 +51,7 @@
         {% if item.last_price_product %}<p class="small text-secondary mt-2 mb-0">Última coincidencia: {% if item.last_price_url %}<a href="{{ item.last_price_url }}" target="_blank" rel="noopener noreferrer">{{ item.last_price_product }} <i class="bi bi-box-arrow-up-right"></i></a>{% else %}{{ item.last_price_product }}{% endif %}</p>{% endif %}
       </div>
       <div class="d-flex flex-wrap gap-2 align-items-start">
-        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('inicio', cards='1x ' ~ item.card_name) }}"><i class="bi bi-search" aria-hidden="true"></i> Buscar ahora</a>
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('inicio', cards=item.card_name) }}"><i class="bi bi-search" aria-hidden="true"></i> Buscar ahora</a>
         <form method="post" action="{{ url_for('update_wishlist_status', item_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acquired" value="{{ 'false' if item.acquired else 'true' }}"><button class="btn btn-sm btn-outline-success" type="submit"><i class="bi {% if item.acquired %}bi-arrow-counterclockwise{% else %}bi-check2{% endif %}" aria-hidden="true"></i> {{ 'Marcar pendiente' if item.acquired else 'Marcar obtenida' }}</button></form>
         <form method="post" action="{{ url_for('delete_wishlist', item_id=item.id) }}" onsubmit="return confirm('¿Eliminar esta carta de tu wishlist?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger btn-icon" type="submit" aria-label="Eliminar {{ item.card_name }}"><i class="bi bi-trash3"></i></button></form>
       </div>

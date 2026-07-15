@@ -184,14 +184,14 @@ class SupabaseStore:
         access_token: str,
         user_id: str,
         name: str,
-        quantity: int,
         notes: str | None,
     ) -> dict[str, Any]:
         payload = {
             "user_id": user_id,
             "card_key": card_key(name),
             "card_name": name.strip(),
-            "desired_quantity": max(1, min(int(quantity), 999)),
+            # Legacy database field. Quantities are no longer part of the product.
+            "desired_quantity": 1,
             "notes": (notes or "").strip()[:1000] or None,
         }
         rows = self._request(

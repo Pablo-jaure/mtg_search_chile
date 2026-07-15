@@ -20,7 +20,12 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Pega una lista como `4x Lightning Bolt`, inicia la cotización y revisa resultados por carta, tienda y diagnóstico.
+Agrega cartas por nombre con sugerencias de Scryfall o importa una lista de Arena,
+MTGO o Moxfield. Las cantidades no son necesarias: formatos antiguos como
+`4x Lightning Bolt` siguen siendo compatibles, pero se busca cada nombre una vez.
+
+La wishlist utiliza el mismo autocompletado. Cada entrada representa una carta,
+sin cantidad, y puede incluir notas y un precio objetivo.
 
 ## Despliegue en Render
 

@@ -109,6 +109,7 @@ async def _get_with_retries(client, url, *, headers, timeout, sem=None, local_se
 def parsear_lista_bulk(texto: str) -> list[str]:
     patron = re.compile(r"^(?:(?P<n>\d+)[xX]?\s+)?(?P<nombre>[^([\n*#]+)")
     cartas = []
+    claves = set()
     for linea in texto.strip().split("\n"):
         linea = linea.strip()
         if not linea or linea.lower().startswith(("sideboard","sb:","//","deck","maybeboard")):
@@ -116,9 +117,11 @@ def parsear_lista_bulk(texto: str) -> list[str]:
         m = patron.match(linea)
         if m:
             nombre = re.sub(r"\s+\([A-Z0-9]+\).*$", "", m.group("nombre")).strip()
-            if nombre:
+            clave = nombre.casefold()
+            if nombre and clave not in claves:
+                claves.add(clave)
                 cartas.append(nombre)
-    return list(dict.fromkeys(cartas))
+    return cartas
 
 
 def es_match(buscado: str, encontrado: str) -> bool:

@@ -336,10 +336,15 @@ def health():
 
 @app.route("/", methods=["GET", "POST"])
 def inicio():
-    lista = request.args.get(
-        "cards", "1x Skullclamp\n1x Nest of Scarabs\n1x Lightning Bolt"
-    )
-    contexto = {"lista": lista, "tiendas": TIENDAS_CONFIG, "search_run_id": None}
+    lista = request.args.get("cards", "")
+    initial_cards = parsear_lista_bulk(lista)
+    lista = "\n".join(initial_cards)
+    contexto = {
+        "lista": lista,
+        "initial_cards": initial_cards,
+        "tiendas": TIENDAS_CONFIG,
+        "search_run_id": None,
+    }
     try:
         _, store_by_name, favorite_slugs = favorite_context()
     except SupabaseError:
@@ -347,14 +352,15 @@ def inicio():
     contexto.update(store_by_name=store_by_name, favorite_store_slugs=favorite_slugs)
 
     if request.method == "POST":
-        lista = request.form.get("lista", "")
-        cartas = parsear_lista_bulk(lista)
-        contexto.update(lista=lista, cartas=cartas)
+        cartas = parsear_lista_bulk(request.form.get("lista", ""))
+        lista = "\n".join(cartas)
+        contexto.update(lista=lista, initial_cards=cartas[:100])
         if not cartas:
             contexto["error"] = "No se reconoció ninguna carta en la lista."
         elif len(cartas) > 100:
             contexto["error"] = "El máximo es de 100 cartas distintas por búsqueda."
         else:
+            contexto["cartas"] = cartas
             started = time.perf_counter()
             try:
                 resultados, scryfall, logs = asyncio.run(cotizar_web(cartas))
@@ -502,7 +508,6 @@ def wishlist():
                 g.user["access_token"],
                 g.user["id"],
                 name,
-                request.form.get("desired_quantity", 1),
                 request.form.get("notes"),
             )
             flash("Carta guardada en tu wishlist.", "success")
