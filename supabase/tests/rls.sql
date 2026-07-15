@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(20);
 
 select ok(
   (select bool_and(relrowsecurity)
@@ -19,6 +19,22 @@ select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001
 insert into public.wishlist_items (user_id, card_key, card_name)
 values ('10000000-0000-0000-0000-000000000001', 'lightning-bolt', 'Lightning Bolt');
 select is((select count(*) from public.wishlist_items), 1::bigint, 'owner can read own wishlist');
+select lives_ok(
+  $$
+    insert into public.wishlist_items (
+      user_id, card_key, card_name, desired_quantity, notes
+    ) values (
+      auth.uid(), 'lightning-bolt', 'Lightning Bolt', 2, 'upsert test'
+    )
+    on conflict (user_id, card_key) do update set
+      user_id = excluded.user_id,
+      card_key = excluded.card_key,
+      card_name = excluded.card_name,
+      desired_quantity = excluded.desired_quantity,
+      notes = excluded.notes
+  $$,
+  'owner can upsert an existing wishlist item'
+);
 select is(
   (select price_alert_generation from public.configure_wishlist_price_alert(
     (select id from public.wishlist_items where card_key = 'lightning-bolt'), 1500, true
@@ -38,6 +54,14 @@ select ok(
 select ok(
   not has_column_privilege('authenticated', 'public.wishlist_items', 'last_price_clp', 'INSERT,UPDATE'),
   'authenticated clients cannot write internal tracker state'
+);
+select ok(
+  has_table_privilege('service_role', 'public.price_tracker_runs', 'SELECT')
+  and has_table_privilege('service_role', 'public.price_alert_deliveries', 'SELECT')
+  and has_table_privilege('service_role', 'public.price_alert_deliveries', 'INSERT')
+  and has_table_privilege('service_role', 'public.price_alert_deliveries', 'UPDATE')
+  and has_table_privilege('service_role', 'public.price_alert_deliveries', 'DELETE'),
+  'service role can maintain tracker queue and delivery outbox'
 );
 select throws_ok(
   $$update public.profiles set role = 'admin' where id = auth.uid()$$,
