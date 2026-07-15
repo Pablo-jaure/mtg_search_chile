@@ -41,9 +41,30 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
+  rls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase database
+        run: supabase db start
+
+      - name: Run RLS policy tests
+        run: supabase test db --local supabase/tests/rls.sql
+
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: test
+    needs:
+      - test
+      - rls
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
