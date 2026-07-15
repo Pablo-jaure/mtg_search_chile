@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block title %}Historial de compras{% endblock %}{% block content %}
+<h1 class="h3 mb-3">Intentos de compra</h1><div class="list-group shadow-sm">{% for event in events %}<a class="list-group-item list-group-item-action" href="{{ event.destination_url }}" target="_blank" rel="noopener"><div class="d-flex justify-content-between"><strong>{{ event.stores.name if event.stores else event.platform }}</strong><span>{{ event.created_at }}</span></div><small>{{ event.card_count }} carta(s){% if event.estimated_total_clp is not none %} · ${{ '{:,.0f}'.format(event.estimated_total_clp).replace(',', '.') }} estimados{% endif %}</small></a>{% else %}<div class="list-group-item text-muted">No hay eventos de carrito.</div>{% endfor %}</div>
+{% endblock %}
