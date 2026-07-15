@@ -1,4 +1,21 @@
-{% extends "base.html" %}{% block title %}Detalle de búsqueda{% endblock %}{% block content %}
-<h1 class="h3">Búsqueda del {{ detail.run.created_at }}</h1><pre class="bg-light border rounded p-3">{{ detail.run.query_text }}</pre>
-{% for card in detail.cards %}<div class="card mb-3 shadow-sm"><div class="card-header"><strong>{{ card.canonical_name or card.searched_name }}</strong></div><div class="table-responsive"><table class="table table-sm mb-0"><tbody>{% for result in card.search_results %}<tr><td>{{ result.stores.name if result.stores else '' }}</td><td>{{ result.product_name }}</td><td>${{ '{:,.0f}'.format(result.price_clp).replace(',', '.') }}</td><td><a href="{{ result.product_url }}" target="_blank" rel="noopener">Abrir</a></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}
+{% extends "base.html" %}
+{% from "_components.html" import page_header, empty_state, status_badge %}
+{% block title %}Detalle de búsqueda · MTG Search Chile{% endblock %}
+{% block content %}
+{% call page_header('Detalle de búsqueda', 'Precios capturados al momento de la cotización. Repite la búsqueda para conocer el stock actual.', 'Historial', 'bi-receipt') %}<a class="btn btn-primary" href="{{ url_for('inicio', cards=detail.run.query_text) }}"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Cotizar nuevamente</a>{% endcall %}
+<div class="card section-card mb-4">
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">{{ status_badge(detail.run.status|capitalize, 'success' if detail.run.status == 'completed' else 'warning') }}<span class="text-secondary"><time datetime="{{ detail.run.created_at }}" data-local-date>{{ detail.run.created_at }}</time> · {{ detail.run.card_count }} cartas · {{ detail.run.result_count }} resultados</span></div>
+  <details><summary class="fw-semibold">Ver lista original</summary><pre class="bg-light border rounded p-3 mt-2 mb-0 font-monospace">{{ detail.run.query_text }}</pre></details>
+</div>
+{% for card in detail.cards %}
+<article class="card card-result">
+  <header class="card-result__header"><div><h2 class="card-result__title">{{ card.canonical_name or card.searched_name }}</h2><div class="card-result__meta"><span>{{ card.search_results|length }} oferta{% if card.search_results|length != 1 %}s{% endif %}</span>{% if card.usd_price %}<span>Referencia Scryfall: USD ${{ '%.2f'|format(card.usd_price) }}</span>{% endif %}</div></div></header>
+  <div class="card-result__body">
+    {% if card.image_url %}<img class="card-art" src="{{ card.image_url }}" alt="Carta {{ card.canonical_name or card.searched_name }}" loading="lazy">{% else %}<div class="card-art card-art-placeholder"><i class="bi bi-image"></i></div>{% endif %}
+    <div class="item-list">
+      {% for result in card.search_results|sort(attribute='price_clp') %}<div class="offer-card {% if loop.first %}offer-card--best{% endif %}"><div><strong>{{ result.stores.name if result.stores else 'Tienda' }}</strong>{% if loop.first %}<div class="best-price">Mejor precio guardado</div>{% endif %}</div><div class="price price--large">${{ '{:,.0f}'.format(result.price_clp).replace(',', '.') }}</div><div class="offer-card__product">{{ result.product_name }}</div><div class="offer-card__action"><a class="btn btn-sm btn-outline-primary" href="{{ result.product_url }}" target="_blank" rel="noopener noreferrer">Abrir producto <i class="bi bi-box-arrow-up-right"></i></a></div></div>{% else %}<p class="text-secondary">Esta carta no tuvo ofertas guardadas.</p>{% endfor %}
+    </div>
+  </div>
+</article>
+{% else %}{{ empty_state('bi-search', 'Sin detalle disponible', 'Esta búsqueda no contiene cartas guardadas.', url_for('search_history'), 'Volver al historial') }}{% endfor %}
 {% endblock %}

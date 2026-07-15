@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(17);
 
 select ok(
   (select bool_and(relrowsecurity)
@@ -19,6 +19,26 @@ select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001
 insert into public.wishlist_items (user_id, card_key, card_name)
 values ('10000000-0000-0000-0000-000000000001', 'lightning-bolt', 'Lightning Bolt');
 select is((select count(*) from public.wishlist_items), 1::bigint, 'owner can read own wishlist');
+select is(
+  (select price_alert_generation from public.configure_wishlist_price_alert(
+    (select id from public.wishlist_items where card_key = 'lightning-bolt'), 1500, true
+  )),
+  1,
+  'setting a target activates generation one'
+);
+select is(
+  (select target_price_clp from public.wishlist_items where card_key = 'lightning-bolt'),
+  1500,
+  'target price is stored in CLP'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.claim_price_tracker_card(uuid)', 'EXECUTE'),
+  'authenticated clients cannot claim tracker work'
+);
+select ok(
+  not has_column_privilege('authenticated', 'public.wishlist_items', 'last_price_clp', 'INSERT,UPDATE'),
+  'authenticated clients cannot write internal tracker state'
+);
 select throws_ok(
   $$update public.profiles set role = 'admin' where id = auth.uid()$$,
   '42501',
@@ -27,9 +47,35 @@ select throws_ok(
 );
 
 reset role;
+set local role service_role;
+select lives_ok(
+  $$select public.start_or_resume_price_tracker_run()$$,
+  'service role can start tracker run'
+);
+create temporary table claimed_tracker_card as
+select * from public.claim_price_tracker_card((select id from public.price_tracker_runs where status = 'running'));
+select is((select count(*) from claimed_tracker_card), 1::bigint, 'active wishlist card enters queue');
+select is(
+  public.record_price_tracker_result(
+    (select id from claimed_tracker_card), 1500, 'Test Store', 'Lightning Bolt NM', 'https://example.test/bolt', 2
+  ),
+  1,
+  'price equal to target queues an alert'
+);
+select public.record_price_tracker_result(
+  (select id from claimed_tracker_card), 1400, 'Test Store', 'Lightning Bolt NM', 'https://example.test/bolt', 2
+);
+select is(
+  (select count(*) from public.price_alert_deliveries),
+  1::bigint,
+  'recording the result twice cannot duplicate one generation'
+);
+
+reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000002', true);
 select is((select count(*) from public.wishlist_items), 0::bigint, 'user B cannot read user A wishlist');
+select is((select count(*) from public.price_alert_deliveries), 0::bigint, 'user B cannot read user A alerts');
 select is(
   (select count(*) from public.search_runs where user_id = '10000000-0000-0000-0000-000000000001'),
   0::bigint,

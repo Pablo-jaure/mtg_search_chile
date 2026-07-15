@@ -1,0 +1,30 @@
+{% macro page_header(title, description='', eyebrow='', icon='') -%}
+<header class="page-header">
+  <div class="page-header__copy">
+    {% if eyebrow %}<span class="eyebrow">{{ eyebrow }}</span>{% endif %}
+    <h1>{% if icon %}<i class="bi {{ icon }}" aria-hidden="true"></i>{% endif %}{{ title }}</h1>
+    {% if description %}<p>{{ description }}</p>{% endif %}
+  </div>
+  {% if caller is defined %}<div class="page-header__actions">{{ caller() }}</div>{% endif %}
+</header>
+{%- endmacro %}
+
+{% macro empty_state(icon, title, description, action_url='', action_label='') -%}
+<section class="empty-state" aria-labelledby="empty-state-title">
+  <span class="empty-state__icon" aria-hidden="true"><i class="bi {{ icon }}"></i></span>
+  <h2 id="empty-state-title">{{ title }}</h2>
+  <p>{{ description }}</p>
+  {% if action_url and action_label %}<a class="btn btn-primary" href="{{ action_url }}">{{ action_label }}</a>{% endif %}
+</section>
+{%- endmacro %}
+
+{% macro metric_card(value, label, icon='bi-bar-chart', tone='navy') -%}
+<div class="metric-card metric-card--{{ tone }}">
+  <span class="metric-card__icon" aria-hidden="true"><i class="bi {{ icon }}"></i></span>
+  <div><strong>{{ value }}</strong><span>{{ label }}</span></div>
+</div>
+{%- endmacro %}
+
+{% macro status_badge(label, tone='neutral', icon='') -%}
+<span class="status-badge status-badge--{{ tone }}">{% if icon %}<i class="bi {{ icon }}" aria-hidden="true"></i>{% endif %}{{ label }}</span>
+{%- endmacro %}

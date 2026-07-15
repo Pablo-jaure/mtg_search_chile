@@ -25,3 +25,16 @@ def test_last_admin_cannot_be_demoted(monkeypatch):
     monkeypatch.setattr(store, "_request", lambda *args, **kwargs: next(replies))
     with pytest.raises(SupabaseError, match="administrador"):
         store.admin_update_user("a", "a", role="user", status="active")
+
+
+def test_configure_price_alert_uses_authenticated_rpc(monkeypatch):
+    store = SupabaseStore(SupabaseConfig("https://x", "public", "secret"))
+    captured = {}
+    def fake_request(method, path, **kwargs):
+        captured.update(method=method, path=path, **kwargs)
+        return {"id": "item-1"}
+    monkeypatch.setattr(store, "_request", fake_request)
+    store.configure_wishlist_price_alert("jwt", "item-1", 1500, True)
+    assert captured["path"] == "/rest/v1/rpc/configure_wishlist_price_alert"
+    assert captured["token"] == "jwt"
+    assert captured["json"]["p_target_price_clp"] == 1500

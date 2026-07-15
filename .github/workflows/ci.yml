@@ -60,11 +60,28 @@ jobs:
       - name: Run RLS policy tests
         run: supabase test db --local supabase/tests/rls.sql
 
+  edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check price tracker Edge Function
+        run: deno check supabase/functions/wishlist-price-tracker/index.ts
+
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - test
       - rls
+      - edge
     runs-on: ubuntu-latest
     timeout-minutes: 5
 

@@ -1,3 +1,16 @@
-{% extends "base.html" %}{% block title %}Tiendas favoritas{% endblock %}{% block content %}
-<h1 class="h3 mb-3">Tiendas favoritas</h1><div class="list-group shadow-sm">{% for favorite in favorites %}<div class="list-group-item d-flex justify-content-between align-items-center"><div><strong>{{ favorite.stores.name }}</strong><br><small>{{ favorite.stores.platform }}</small></div><form method="post" action="{{ url_for('delete_favorite', store_id=favorite.store_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('favorite_stores') }}"><button class="btn btn-sm btn-outline-danger">Quitar</button></form></div>{% else %}<div class="list-group-item text-muted">Aún no tienes tiendas favoritas.</div>{% endfor %}</div>
+{% extends "base.html" %}
+{% from "_components.html" import page_header, empty_state, status_badge %}
+{% block title %}Tiendas favoritas · MTG Search Chile{% endblock %}
+{% block content %}
+{{ page_header('Tiendas favoritas', 'Tus tiendas preferidas aparecen primero y pueden usarse para filtrar comparaciones.', 'Preferencias', 'bi-star') }}
+{% if favorites %}
+<div class="item-list">
+  {% for favorite in favorites %}
+  <article class="list-card">
+    <div class="list-card__main"><span class="list-card__icon"><i class="bi bi-shop"></i></span><div class="list-card__copy"><strong>{{ favorite.stores.name }}</strong>{{ status_badge(favorite.stores.platform|capitalize, 'neutral') }}</div></div>
+    <div class="list-card__actions"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('inicio') }}">Buscar cartas</a><form method="post" action="{{ url_for('delete_favorite', store_id=favorite.store_id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('favorite_stores') }}"><button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-star-fill" aria-hidden="true"></i> Quitar</button></form></div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}{{ empty_state('bi-star', 'Aún no tienes tiendas favoritas', 'Marca una tienda con la estrella desde los resultados para encontrarla más rápido después.', url_for('inicio'), 'Buscar cartas') }}{% endif %}
 {% endblock %}

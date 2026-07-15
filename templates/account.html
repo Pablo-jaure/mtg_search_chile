@@ -1,6 +1,53 @@
-{% extends "base.html" %}{% block title %}Mi cuenta{% endblock %}{% block content %}
-<div class="row g-4"><section class="col-lg-7"><div class="card shadow-sm"><div class="card-body"><div class="d-flex gap-3 align-items-center">{% if current_user.profile.avatar_url %}<img src="{{ current_user.profile.avatar_url }}" width="64" height="64" class="rounded-circle" alt="Avatar">{% endif %}<div><h1 class="h3 mb-1">Mi cuenta</h1><p class="mb-0">{{ current_user.email }} · {{ current_user.profile.role }}</p><small class="text-muted">Cuenta creada: {{ current_user.profile.created_at }}</small></div></div><hr>
-<form method="post" action="{{ url_for('update_account') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label">Nombre visible</label><div class="input-group"><input class="form-control" name="display_name" maxlength="200" value="{{ current_user.profile.display_name or '' }}"><button class="btn btn-primary">Guardar</button></div></form>
-<hr><div class="row text-center">{% for label,key in [('Wishlist','wishlist'),('Favoritas','favorites'),('Búsquedas','searches'),('Compras','carts')] %}<div class="col"><div class="fs-3">{{ counts.get(key,0) }}</div><small>{{ label }}</small></div>{% endfor %}</div></div></div></section>
-<aside class="col-lg-5"><div class="card shadow-sm"><div class="card-body"><h2 class="h5">Tiendas favoritas</h2>{% for favorite in favorites %}<div>{{ favorite.stores.name }}</div>{% else %}<p class="text-muted">Aún no tienes favoritas.</p>{% endfor %}<a href="{{ url_for('favorite_stores') }}">Administrar favoritas</a><hr><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('search_history') }}">Eliminar o revisar historial</a><form class="mt-3" method="post" action="{{ url_for('request_account_deletion') }}" onsubmit="return confirm('¿Registrar solicitud de eliminación?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-danger btn-sm">Solicitar eliminación de cuenta</button></form></div></div></aside></div>
+{% extends "base.html" %}
+{% from "_components.html" import page_header, metric_card, status_badge %}
+{% block title %}Mi cuenta · MTG Search Chile{% endblock %}
+{% block content %}
+{{ page_header('Mi cuenta', 'Administra tu perfil, tus tiendas preferidas y el historial de tu actividad.', 'Configuración', 'bi-person-circle') }}
+
+<div class="row g-4">
+  <section class="col-lg-8">
+    <div class="card section-card mb-4">
+      <div class="profile-card mb-4">
+        {% if current_user.profile.avatar_url %}<img src="{{ current_user.profile.avatar_url }}" width="72" height="72" class="profile-avatar" alt="Avatar de {{ current_user.profile.display_name or current_user.email }}">
+        {% else %}<span class="profile-avatar profile-avatar--placeholder" aria-hidden="true"><i class="bi bi-person"></i></span>{% endif %}
+        <div><h2 class="h4 mb-1">{{ current_user.profile.display_name or 'Tu perfil' }}</h2><p class="text-secondary mb-1">{{ current_user.email }}</p>{{ status_badge(current_user.profile.role, 'info' if current_user.profile.role == 'admin' else 'neutral', 'bi-shield-check' if current_user.profile.role == 'admin' else 'bi-person') }}</div>
+      </div>
+      <h2 class="section-title"><i class="bi bi-pencil-square" aria-hidden="true"></i>Información del perfil</h2>
+      <form method="post" action="{{ url_for('update_account') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label" for="display-name">Nombre visible</label>
+        <div class="input-group"><input class="form-control" id="display-name" name="display_name" maxlength="200" value="{{ current_user.profile.display_name or '' }}"><button class="btn btn-primary" type="submit">Guardar cambios</button></div>
+        <div class="form-text">Este nombre se muestra únicamente dentro de tu cuenta.</div>
+      </form>
+    </div>
+
+    <div class="metric-grid">
+      {{ metric_card(counts.get('wishlist', 0), 'Cartas en wishlist', 'bi-heart', 'red') }}
+      {{ metric_card(counts.get('favorites', 0), 'Tiendas favoritas', 'bi-star') }}
+      {{ metric_card(counts.get('searches', 0), 'Búsquedas guardadas', 'bi-clock-history') }}
+      {{ metric_card(counts.get('carts', 0), 'Intentos de carrito', 'bi-bag', 'green') }}
+    </div>
+  </section>
+
+  <aside class="col-lg-4">
+    <div class="card section-card mb-4">
+      <h2 class="section-title"><i class="bi bi-star" aria-hidden="true"></i>Tiendas favoritas</h2>
+      {% if favorites %}<div class="item-list mb-3">{% for favorite in favorites[:5] %}<div class="d-flex align-items-center gap-2"><i class="bi bi-shop text-secondary" aria-hidden="true"></i><span>{{ favorite.stores.name }}</span></div>{% endfor %}</div>
+      {% else %}<p class="text-secondary">Guarda tiendas para filtrar rápidamente los resultados.</p>{% endif %}
+      <a class="btn btn-outline-primary w-100" href="{{ url_for('favorite_stores') }}">Administrar favoritas</a>
+    </div>
+    <div class="card section-card mb-4">
+      <h2 class="section-title"><i class="bi bi-clock-history" aria-hidden="true"></i>Tu actividad</h2>
+      <p class="text-secondary">Revisa, repite o elimina tus búsquedas anteriores.</p>
+      <a class="btn btn-outline-primary w-100" href="{{ url_for('search_history') }}">Revisar historial</a>
+    </div>
+    <div class="card section-card danger-zone">
+      <h2 class="section-title"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>Zona sensible</h2>
+      <p class="small text-secondary">La solicitud registra tu intención de eliminar la cuenta y sus datos asociados.</p>
+      <form method="post" action="{{ url_for('request_account_deletion') }}" onsubmit="return confirm('¿Registrar solicitud de eliminación?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-danger w-100" type="submit">Solicitar eliminación</button>
+      </form>
+    </div>
+  </aside>
+</div>
 {% endblock %}

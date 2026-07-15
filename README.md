@@ -34,6 +34,21 @@ gunicorn app:app
 La aplicación también respeta la variable `PORT` cuando se inicia directamente
 con `python app.py`.
 
+## Price tracker de wishlist
+
+Cada carta de la wishlist puede tener un precio objetivo en CLP. La función
+`wishlist-price-tracker` procesa una carta por invocación, consulta el endpoint
+interno firmado de Render y envía una sola alerta mediante Resend cuando el
+precio mínimo es igual o inferior al objetivo.
+
+El esquema está en
+`supabase/migrations/20260715050000_wishlist_price_tracker.sql`. Después de
+desplegar la función y configurar sus secretos, crea en Vault
+`price_tracker_function_url` y `price_tracker_cron_secret`, y ejecuta
+`supabase/cron/wishlist_price_tracker.sql` para habilitar el ciclo de seis horas.
+El cron se mantiene separado de las migraciones para que nunca se active antes
+de que Render, Resend y la Edge Function estén listos.
+
 GitHub Actions valida cada pull request y cada cambio en `main`. Si los checks
 de `main` terminan correctamente, el job de despliegue inicia una nueva versión
 en Render mediante su API.

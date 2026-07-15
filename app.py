@@ -1,8 +1,10 @@
 import asyncio
+import hashlib
 import hmac
 import os
 import secrets
 import time
+import uuid
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
@@ -35,6 +37,7 @@ exec(compile(_core, "mtg_cotizador.py", "exec"), globals())
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
+app.json.ensure_ascii = False
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -118,7 +121,7 @@ def load_request_user():
             g.user = supabase.authenticate(token)
 
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-        exempt = request.endpoint in {"auth_session"}
+        exempt = request.endpoint in {"auth_session", "internal_price_tracker_check"}
         if not exempt and not valid_csrf():
             abort(400, "Token CSRF inválido o ausente")
 
@@ -488,6 +491,83 @@ def update_wishlist_status(item_id):
     )
     flash("Estado de wishlist actualizado.", "success")
     return redirect(url_for("wishlist"))
+
+
+@app.route("/wishlist/<item_id>/price-alert", methods=["POST"])
+@login_required
+def update_wishlist_price_alert(item_id):
+    enabled = request.form.get("enabled") == "true"
+    raw_target = request.form.get("target_price_clp", "").strip()
+    try:
+        target = int(raw_target) if raw_target else None
+    except ValueError:
+        flash("El precio objetivo debe ser un número entero en CLP.", "danger")
+        return redirect(url_for("wishlist"))
+    if enabled and (target is None or target < 1 or target > 100_000_000):
+        flash("El precio objetivo debe estar entre $1 y $100.000.000.", "danger")
+        return redirect(url_for("wishlist"))
+    supabase.configure_wishlist_price_alert(
+        g.user["access_token"], item_id, target, enabled
+    )
+    flash("Alerta de precio actualizada.", "success")
+    return redirect(url_for("wishlist"))
+
+
+@app.route("/internal/price-tracker/check", methods=["POST"])
+def internal_price_tracker_check():
+    secret = os.environ.get("PRICE_TRACKER_INTERNAL_SECRET", "")
+    if not secret or not supabase:
+        return jsonify(error="Price tracker no configurado"), 503
+
+    timestamp = request.headers.get("X-Tracker-Timestamp", "")
+    nonce = request.headers.get("X-Tracker-Nonce", "")
+    provided = request.headers.get("X-Tracker-Signature", "")
+    try:
+        timestamp_value = int(timestamp)
+        nonce_value = str(uuid.UUID(nonce))
+    except (TypeError, ValueError, AttributeError):
+        return jsonify(error="Firma inválida"), 401
+    if abs(int(time.time()) - timestamp_value) > 300:
+        return jsonify(error="Firma expirada"), 401
+
+    raw_body = request.get_data(cache=True)
+    signed = f"{timestamp}.{nonce_value}.".encode() + raw_body
+    expected = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, provided):
+        return jsonify(error="Firma inválida"), 401
+    if not supabase.claim_tracker_nonce(nonce_value):
+        return jsonify(error="Solicitud repetida"), 409
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or set(payload) != {"card_name"}:
+        return jsonify(error="El payload debe contener exactamente card_name"), 400
+    card_name = payload.get("card_name")
+    if not isinstance(card_name, str) or not card_name.strip() or len(card_name) > 300:
+        return jsonify(error="card_name inválido"), 400
+
+    try:
+        resultados, _, _ = asyncio.run(cotizar_web([card_name.strip()]))
+    except Exception as exc:
+        app.logger.exception("Falló el scraper del price tracker")
+        return jsonify(error=f"No se pudo cotizar: {type(exc).__name__}"), 502
+
+    ofertas = [
+        row for row in resultados
+        if isinstance(row.get("Precio"), (int, float)) and row["Precio"] >= 0
+    ]
+    if not ofertas:
+        return jsonify(
+            price_clp=None, store_name=None, product_name=None,
+            product_url=None, offers_count=0,
+        )
+    winner = min(ofertas, key=lambda row: row["Precio"])
+    return jsonify(
+        price_clp=int(winner["Precio"]),
+        store_name=winner.get("Tienda"),
+        product_name=winner.get("Producto Encontrado"),
+        product_url=winner.get("Link"),
+        offers_count=len(ofertas),
+    )
 
 
 @app.route("/favorites/<int:store_id>", methods=["POST"])

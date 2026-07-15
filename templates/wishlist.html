@@ -1,5 +1,67 @@
-{% extends "base.html" %}{% block title %}Wishlist{% endblock %}{% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h3">Wishlist</h1></div>
-<form method="post" class="card card-body shadow-sm mb-4"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="row g-2"><div class="col-md-6"><input class="form-control" name="card_name" placeholder="Nombre de carta" required></div><div class="col-md-2"><input class="form-control" type="number" min="1" max="999" name="desired_quantity" value="1"></div><div class="col-md-3"><input class="form-control" name="notes" maxlength="1000" placeholder="Notas"></div><div class="col-md-1"><button class="btn btn-primary w-100">+</button></div></div></form>
-<div class="list-group shadow-sm">{% for item in items %}<div class="list-group-item d-flex justify-content-between align-items-center {% if item.acquired %}text-decoration-line-through opacity-75{% endif %}"><div><strong>{{ item.card_name }}</strong> × {{ item.desired_quantity }}{% if item.notes %}<div class="small text-muted">{{ item.notes }}</div>{% endif %}</div><div class="d-flex gap-2"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('inicio', cards='1x ' ~ item.card_name) }}">Buscar</a><form method="post" action="{{ url_for('update_wishlist_status', item_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acquired" value="{{ 'false' if item.acquired else 'true' }}"><button class="btn btn-sm btn-outline-success">{{ 'Pendiente' if item.acquired else 'Marcar obtenida' }}</button></form><form method="post" action="{{ url_for('delete_wishlist', item_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger">Eliminar</button></form></div></div>{% else %}<div class="list-group-item text-muted">Tu wishlist está vacía.</div>{% endfor %}</div>
+{% extends "base.html" %}
+{% from "_components.html" import page_header, empty_state, status_badge %}
+{% block title %}Wishlist · MTG Search Chile{% endblock %}
+{% block content %}
+{{ page_header('Wishlist y alertas', 'Sigue las cartas que buscas y recibe un correo cuando alcancen tu precio objetivo.', 'Seguimiento', 'bi-heart') }}
+
+<section class="card section-card mb-4" aria-labelledby="add-wishlist-title">
+  <h2 class="section-title" id="add-wishlist-title"><i class="bi bi-plus-circle" aria-hidden="true"></i>Agregar una carta</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-5"><label class="form-label" for="wishlist-card-name">Nombre de la carta</label><input class="form-control" id="wishlist-card-name" name="card_name" placeholder="Ej: Lightning Bolt" required></div>
+      <div class="col-sm-4 col-md-2"><label class="form-label" for="wishlist-quantity">Cantidad</label><input class="form-control" id="wishlist-quantity" type="number" min="1" max="999" name="desired_quantity" value="1"></div>
+      <div class="col-sm-8 col-md-3"><label class="form-label" for="wishlist-notes">Notas <span class="fw-normal text-secondary">(opcional)</span></label><input class="form-control" id="wishlist-notes" name="notes" maxlength="1000" placeholder="Edición, condición…"></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg" aria-hidden="true"></i> Agregar</button></div>
+    </div>
+  </form>
+</section>
+
+{% if items %}
+<div class="item-list">
+{% for item in items %}
+  {% set delivery = item.price_alert_deliveries[0] if item.price_alert_deliveries else none %}
+  {% set reached = item.price_alert_triggered_at or item.price_alert_sent_at %}
+  <article class="card section-card wishlist-item {% if item.acquired %}wishlist-item--acquired{% elif reached %}wishlist-item--reached{% elif item.price_alert_enabled %}wishlist-item--active{% endif %}">
+    <div class="d-flex flex-wrap justify-content-between gap-3">
+      <div>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+          <h2 class="h5 mb-0 {% if item.acquired %}text-decoration-line-through{% endif %}">{{ item.card_name }}</h2>
+          {{ status_badge(item.desired_quantity ~ ' unidad(es)', 'neutral') }}
+          {% if item.acquired %}{{ status_badge('Obtenida', 'success', 'bi-check-circle') }}
+          {% elif not item.target_price_clp %}{{ status_badge('Sin objetivo', 'neutral', 'bi-dash-circle') }}
+          {% elif delivery and delivery.status == 'failed' %}{{ status_badge('Correo fallido', 'danger', 'bi-exclamation-octagon') }}
+          {% elif item.price_alert_sent_at %}{{ status_badge('Precio alcanzado · correo enviado', 'success', 'bi-envelope-check') }}
+          {% elif item.price_alert_triggered_at %}{{ status_badge('Precio alcanzado · correo pendiente', 'warning', 'bi-envelope') }}
+          {% elif item.price_alert_enabled %}{{ status_badge('Alerta activa', 'info', 'bi-bell') }}
+          {% else %}{{ status_badge('Alerta pausada', 'neutral', 'bi-bell-slash') }}{% endif %}
+        </div>
+        {% if item.notes %}<p class="small text-secondary mb-0">{{ item.notes }}</p>{% endif %}
+        <div class="wishlist-price">
+          <div><span>Precio objetivo</span><strong>{% if item.target_price_clp %}${{ '{:,.0f}'.format(item.target_price_clp).replace(',', '.') }}{% else %}Sin definir{% endif %}</strong></div>
+          <div><span>Mejor precio conocido</span><strong>{% if item.last_price_clp is not none %}${{ '{:,.0f}'.format(item.last_price_clp).replace(',', '.') }}{% else %}Sin revisión{% endif %}</strong></div>
+          {% if item.last_price_store %}<div><span>Tienda</span><strong>{{ item.last_price_store }}</strong></div>{% endif %}
+          {% if item.last_price_checked_at %}<div><span>Última revisión</span><strong><time datetime="{{ item.last_price_checked_at }}" data-local-date>{{ item.last_price_checked_at }}</time></strong></div>{% endif %}
+        </div>
+        {% if item.last_price_product %}<p class="small text-secondary mt-2 mb-0">Última coincidencia: {% if item.last_price_url %}<a href="{{ item.last_price_url }}" target="_blank" rel="noopener noreferrer">{{ item.last_price_product }} <i class="bi bi-box-arrow-up-right"></i></a>{% else %}{{ item.last_price_product }}{% endif %}</p>{% endif %}
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-start">
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('inicio', cards='1x ' ~ item.card_name) }}"><i class="bi bi-search" aria-hidden="true"></i> Buscar ahora</a>
+        <form method="post" action="{{ url_for('update_wishlist_status', item_id=item.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="acquired" value="{{ 'false' if item.acquired else 'true' }}"><button class="btn btn-sm btn-outline-success" type="submit"><i class="bi {% if item.acquired %}bi-arrow-counterclockwise{% else %}bi-check2{% endif %}" aria-hidden="true"></i> {{ 'Marcar pendiente' if item.acquired else 'Marcar obtenida' }}</button></form>
+        <form method="post" action="{{ url_for('delete_wishlist', item_id=item.id) }}" onsubmit="return confirm('¿Eliminar esta carta de tu wishlist?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger btn-icon" type="submit" aria-label="Eliminar {{ item.card_name }}"><i class="bi bi-trash3"></i></button></form>
+      </div>
+    </div>
+
+    <hr>
+    <form method="post" action="{{ url_for('update_wishlist_price_alert', item_id=item.id) }}" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-sm-5 col-lg-3"><label class="form-label small" for="target-{{ item.id }}">Precio objetivo (CLP)</label><input id="target-{{ item.id }}" class="form-control" type="number" min="1" max="100000000" name="target_price_clp" value="{{ item.target_price_clp or '' }}" placeholder="Ej: 1500" {% if item.acquired %}disabled{% endif %}></div>
+      <div class="col-sm-auto"><button class="btn btn-primary w-100" name="enabled" value="true" {% if item.acquired %}disabled{% endif %}><i class="bi bi-bell" aria-hidden="true"></i> {{ 'Guardar y reactivar' if item.target_price_clp else 'Activar alerta' }}</button></div>
+      {% if item.target_price_clp and item.price_alert_enabled %}<div class="col-sm-auto"><button class="btn btn-outline-secondary w-100" name="enabled" value="false"><i class="bi bi-pause" aria-hidden="true"></i> Pausar</button></div>{% endif %}
+      {% if item.acquired %}<div class="col-12"><div class="form-text">Marca la carta como pendiente para volver a activar una alerta.</div></div>{% endif %}
+    </form>
+  </article>
+{% endfor %}
+</div>
+{% else %}{{ empty_state('bi-heart', 'Tu wishlist está vacía', 'Agrega cartas que quieras seguir y define un precio objetivo para recibir una alerta.', url_for('inicio'), 'Buscar cartas') }}{% endif %}
 {% endblock %}

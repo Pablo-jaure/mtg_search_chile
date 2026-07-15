@@ -1,4 +1,18 @@
-{% extends "base.html" %}{% block title %}Historial de búsquedas{% endblock %}{% block content %}
-<div class="d-flex justify-content-between mb-3"><h1 class="h3">Historial de búsquedas</h1>{% if searches %}<form method="post" action="{{ url_for('delete_all_search_history') }}" onsubmit="return confirm('¿Eliminar todo el historial?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-danger">Eliminar todo</button></form>{% endif %}</div>
-<div class="list-group shadow-sm">{% for search in searches %}<div class="list-group-item d-flex justify-content-between"><a href="{{ url_for('search_history_detail', run_id=search.id) }}"><strong>{{ search.card_count }} cartas</strong> · {{ search.result_count }} resultados<br><small>{{ search.created_at }}</small></a><div class="d-flex gap-2"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('inicio', cards=search.query_text) }}">Repetir</a><form method="post" action="{{ url_for('delete_search_history', run_id=search.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger">Eliminar</button></form></div></div>{% else %}<div class="list-group-item text-muted">No hay búsquedas guardadas.</div>{% endfor %}</div>
+{% extends "base.html" %}
+{% from "_components.html" import page_header, empty_state, status_badge %}
+{% block title %}Historial de búsquedas · MTG Search Chile{% endblock %}
+{% block content %}
+{% call page_header('Historial de búsquedas', 'Abre una cotización anterior o repítela para obtener precios actualizados.', 'Tu actividad', 'bi-clock-history') %}
+  {% if searches %}<form method="post" action="{{ url_for('delete_all_search_history') }}" onsubmit="return confirm('¿Eliminar todo el historial?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash3" aria-hidden="true"></i> Eliminar todo</button></form>{% endif %}
+{% endcall %}
+{% if searches %}
+<div class="item-list">
+  {% for search in searches %}
+  <article class="list-card">
+    <div class="list-card__main"><span class="list-card__icon"><i class="bi bi-search"></i></span><div class="list-card__copy"><strong>{{ search.card_count }} carta{% if search.card_count != 1 %}s{% endif %} · {{ search.result_count }} resultado{% if search.result_count != 1 %}s{% endif %}</strong><small><time datetime="{{ search.created_at }}" data-local-date>{{ search.created_at }}</time>{% if search.duration_ms %} · {{ '%.1f'|format(search.duration_ms / 1000) }} s{% endif %}</small><div class="mt-1">{{ status_badge(search.status|capitalize, 'success' if search.status == 'completed' else 'warning') }}</div></div></div>
+    <div class="list-card__actions"><a class="btn btn-sm btn-primary" href="{{ url_for('search_history_detail', run_id=search.id) }}">Ver detalle</a><a class="btn btn-sm btn-outline-primary" href="{{ url_for('inicio', cards=search.query_text) }}"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Repetir</a><form method="post" action="{{ url_for('delete_search_history', run_id=search.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger btn-icon" type="submit" aria-label="Eliminar búsqueda"><i class="bi bi-trash3"></i></button></form></div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}{{ empty_state('bi-clock-history', 'Todavía no hay búsquedas guardadas', 'Inicia sesión mientras cotizas para volver a consultar tus listas cuando quieras.', url_for('inicio'), 'Hacer una búsqueda') }}{% endif %}
 {% endblock %}

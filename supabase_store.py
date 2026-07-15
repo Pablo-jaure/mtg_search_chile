@@ -170,7 +170,13 @@ class SupabaseStore:
             "GET",
             "/rest/v1/wishlist_items",
             token=access_token,
-            params={"user_id": f"eq.{user_id}", "select": "*", "order": "created_at.desc"},
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "*,price_alert_deliveries(status,last_error,created_at)",
+                "price_alert_deliveries.order": "created_at.desc",
+                "price_alert_deliveries.limit": 1,
+                "order": "created_at.desc",
+            },
         )
 
     def save_wishlist_item(
@@ -217,6 +223,33 @@ class SupabaseStore:
             json={"acquired": acquired},
             prefer="return=minimal",
         )
+
+    def configure_wishlist_price_alert(
+        self,
+        access_token: str,
+        item_id: str,
+        target_price_clp: int | None,
+        enabled: bool,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/rest/v1/rpc/configure_wishlist_price_alert",
+            token=access_token,
+            json={
+                "p_item_id": item_id,
+                "p_target_price_clp": target_price_clp,
+                "p_enabled": enabled,
+            },
+        )
+
+    def claim_tracker_nonce(self, nonce: str) -> bool:
+        result = self._request(
+            "POST",
+            "/rest/v1/rpc/claim_price_tracker_nonce",
+            admin=True,
+            json={"p_nonce": nonce},
+        )
+        return result is True
 
     def persist_search(
         self,
@@ -447,8 +480,13 @@ class SupabaseStore:
         database = self._request(
             "GET", "/rest/v1/admin_database_metrics", admin=True, params={"select": "*", "limit": 1}
         )
+        tracker = self._request(
+            "GET", "/rest/v1/admin_price_tracker_metrics", admin=True,
+            params={"select": "*", "limit": 1},
+        )
         return {
             "database": database[0] if database else {},
+            "price_tracker": tracker[0] if tracker else {},
             "stores": self._request(
                 "GET", "/rest/v1/admin_store_usage", admin=True,
                 params={"select": "*", "order": "cart_event_count.desc,result_count.desc", "limit": 20},

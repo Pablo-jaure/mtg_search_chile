@@ -7,3 +7,6 @@ services:
     startCommand: gunicorn --worker-class gthread --workers 1 --threads 4 --timeout 180 --graceful-timeout 30 app:app
     healthCheckPath: /health
     autoDeployTrigger: off
+    envVars:
+      - key: PRICE_TRACKER_INTERNAL_SECRET
+        sync: false

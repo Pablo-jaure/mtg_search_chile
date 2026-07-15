@@ -7,3 +7,5 @@ __pycache__/
 .vscode/
 Archivo_nuevo.txt
 logdeconstrseñas.py
+SUPABASE_MCP.md
+SUPABASE_PLAN.md

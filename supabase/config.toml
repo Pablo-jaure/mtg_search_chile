@@ -32,3 +32,6 @@ additional_redirect_urls = [
 jwt_expiry = 3600
 enable_signup = true
 enable_anonymous_sign_ins = false
+
+[functions.wishlist-price-tracker]
+verify_jwt = false
