@@ -157,7 +157,7 @@
 
 **Concurrency model:**
 - `httpx.AsyncClient` with `max_keepalive_connections=40, max_connections=100`
-- `asyncio.Semaphore(8)` limits concurrent searches and detail-page verification requests
+- Global semaphores allow 8 concurrent searches/details; detail verification is capped at 2 requests per store and retries transient HTTP failures
 - All store × card requests fire simultaneously via `asyncio.gather()`
 
 ### 4.3 Supabase Store (`supabase_store.py`)
@@ -248,7 +248,7 @@ PORT=                      # Server port (Render sets this automatically)
 | **Last-admin lock** | Cannot demote/delete the last active admin |
 | **HMAC signatures** | Internal endpoints use timestamp + nonce + HMAC-SHA256 |
 | **CORS** | Origin validation on auth session endpoint |
-| **Rate limits** | Search/detail semaphores (8 concurrent) + 100-card max per search |
+| **Rate limits** | 8 global requests, 2 detail requests per store, transient retries + 100-card max per search |
 | **Input validation** | Card names validated via regex parsing; Supabase params use eq. syntax |
 
 ---

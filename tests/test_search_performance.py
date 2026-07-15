@@ -28,7 +28,7 @@ class ConcurrentClient:
         return ShopifyResponse()
 
 
-def test_shopify_detail_requests_run_concurrently_with_shared_limit():
+def test_shopify_detail_requests_respect_per_store_limit():
     client = ConcurrentClient()
     resultados = [
         {
@@ -46,6 +46,32 @@ def test_shopify_detail_requests_run_concurrently_with_shared_limit():
     )
 
     assert len(actualizados) == 6
-    assert client.max_active == 3
+    assert client.max_active == app.DETAIL_CONCURRENCY_PER_STORE
     assert all(resultado["Precio"] == 1990 for resultado in actualizados)
     assert all(resultado["Stock Verificado"] is True for resultado in actualizados)
+
+
+def test_transient_http_errors_are_retried(monkeypatch):
+    class Response:
+        def __init__(self, status_code):
+            self.status_code = status_code
+
+    class Client:
+        def __init__(self):
+            self.calls = 0
+
+        async def get(self, *_args, **_kwargs):
+            self.calls += 1
+            return Response(429 if self.calls == 1 else 200)
+
+    client = Client()
+    monkeypatch.setattr(app, "REQUEST_RETRY_DELAYS", (0,))
+
+    response = asyncio.run(
+        app._get_with_retries(
+            client, "https://example.com", headers={}, timeout=1.0
+        )
+    )
+
+    assert response.status_code == 200
+    assert client.calls == 2

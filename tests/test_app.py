@@ -102,7 +102,10 @@ def test_guest_can_quote_without_persistence(monkeypatch):
         result = {"Tienda": "Card Souls", "Carta Buscada": "Lightning Bolt",
                   "Producto Encontrado": "Lightning Bolt NM", "Precio": 1500,
                   "Link": "https://store.example/bolt", "Shopify Variant ID": "123"}
-        return [result], {"Lightning Bolt": {"buscado": "Lightning Bolt", "nombre_real": "Lightning Bolt"}}, []
+        return [result], {"Lightning Bolt": {
+            "buscado": "Lightning Bolt", "nombre_real": "Lightning Bolt",
+            "imagen": "https://cards.scryfall.io/bolt.jpg",
+        }}, []
 
     monkeypatch.setattr(module, "supabase", FakeSupabase())
     monkeypatch.setattr(module, "cotizar_web", fake_quote)
@@ -112,7 +115,9 @@ def test_guest_can_quote_without_persistence(monkeypatch):
     assert response.status_code == 200
     assert b"Lightning Bolt NM" in response.data
     assert b"offer-list" in response.data
-    assert len(BeautifulSoup(response.data, "html.parser").select("a.product-link")) == 1
+    soup = BeautifulSoup(response.data, "html.parser")
+    assert len(soup.select("a.product-link")) == 1
+    assert soup.select_one("img.card-art").get("height") is None
     assert b"Mejor precio" in response.data
 
 
