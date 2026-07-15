@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import app as module
+from supabase_store import SupabaseError
 
 
 class FakeSupabase:
@@ -24,8 +25,12 @@ class FakeSupabase:
     def get_wishlist(self, *_): return self.saved
     def save_wishlist_item(self, token, user_id, name, quantity, notes):
         self.saved.append({"id": "item-1", "card_name": name, "desired_quantity": int(quantity), "notes": notes})
+    def update_wishlist_item(self, token, user_id, item_id, *, acquired):
+        self.updated_wishlist = {"id": item_id, "acquired": acquired}
     def admin_users(self, _=None): return []
     def admin_audit(self, _=100): return []
+    def admin_usage_metrics(self):
+        return {"database": {}, "stores": [], "cards": [], "daily": []}
 
 
 def csrf(client):
@@ -61,6 +66,22 @@ def test_guest_can_quote_without_persistence(monkeypatch):
     assert b"Lightning Bolt NM" in response.data
 
 
+def test_persistence_failure_does_not_break_quote(monkeypatch):
+    async def fake_quote(_cards):
+        return [], {"Lightning Bolt": {"buscado": "Lightning Bolt"}}, []
+
+    store = FakeSupabase()
+    store.persist_search = lambda *_: (_ for _ in ()).throw(SupabaseError("offline"))
+    monkeypatch.setattr(module, "supabase", store)
+    monkeypatch.setattr(module, "cotizar_web", fake_quote)
+    client = module.app.test_client()
+    logged_in(client)
+    token = csrf(client)
+    response = client.post("/", data={"csrf_token": token, "lista": "1x Lightning Bolt"})
+    assert response.status_code == 200
+    assert "no pudo guardarse" in response.get_data(as_text=True)
+
+
 def test_mutations_require_csrf(monkeypatch):
     monkeypatch.setattr(module, "supabase", FakeSupabase())
     client = module.app.test_client()
@@ -77,6 +98,17 @@ def test_authenticated_wishlist(monkeypatch):
     response = client.post("/wishlist", data={"csrf_token": token, "card_name": "Lightning Bolt", "desired_quantity": 2})
     assert response.status_code == 302
     assert store.saved[0]["card_name"] == "Lightning Bolt"
+
+
+def test_authenticated_user_can_mark_wishlist_item(monkeypatch):
+    store = FakeSupabase()
+    monkeypatch.setattr(module, "supabase", store)
+    client = module.app.test_client()
+    logged_in(client)
+    token = csrf(client)
+    response = client.post("/wishlist/item-1/status", data={"csrf_token": token, "acquired": "true"})
+    assert response.status_code == 302
+    assert store.updated_wishlist == {"id": "item-1", "acquired": True}
 
 
 def test_non_admin_gets_403(monkeypatch):

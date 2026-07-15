@@ -206,6 +206,18 @@ class SupabaseStore:
             params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
         )
 
+    def update_wishlist_item(
+        self, access_token: str, user_id: str, item_id: str, *, acquired: bool
+    ) -> None:
+        self._request(
+            "PATCH",
+            "/rest/v1/wishlist_items",
+            token=access_token,
+            params={"id": f"eq.{item_id}", "user_id": f"eq.{user_id}"},
+            json={"acquired": acquired},
+            prefer="return=minimal",
+        )
+
     def persist_search(
         self,
         access_token: str,
@@ -362,6 +374,7 @@ class SupabaseStore:
             token=access_token,
             json={
                 "user_id": user_id,
+                "client_event_id": event.get("client_event_id"),
                 "search_run_id": event.get("search_run_id"),
                 "store_id": store_id,
                 "platform": str(event.get("platform") or "external")[:50],
@@ -371,7 +384,7 @@ class SupabaseStore:
                 "items": event.get("items") or [],
                 "destination_url": str(event.get("destination_url") or "")[:4000],
             },
-            prefer="return=minimal",
+            prefer="resolution=ignore-duplicates,return=minimal",
         )
 
     def get_cart_history(self, access_token: str, user_id: str) -> list[dict[str, Any]]:
@@ -429,6 +442,26 @@ class SupabaseStore:
             admin=True,
             params={"select": "*", "order": "created_at.desc", "limit": min(limit, 500)},
         )
+
+    def admin_usage_metrics(self) -> dict[str, Any]:
+        database = self._request(
+            "GET", "/rest/v1/admin_database_metrics", admin=True, params={"select": "*", "limit": 1}
+        )
+        return {
+            "database": database[0] if database else {},
+            "stores": self._request(
+                "GET", "/rest/v1/admin_store_usage", admin=True,
+                params={"select": "*", "order": "cart_event_count.desc,result_count.desc", "limit": 20},
+            ),
+            "cards": self._request(
+                "GET", "/rest/v1/admin_card_usage", admin=True,
+                params={"select": "*", "order": "search_count.desc", "limit": 20},
+            ),
+            "daily": self._request(
+                "GET", "/rest/v1/admin_daily_usage", admin=True,
+                params={"select": "*", "order": "usage_date.desc", "limit": 30},
+            ),
+        }
 
     def admin_update_user(
         self,

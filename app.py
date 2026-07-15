@@ -418,6 +418,13 @@ def account():
     return render_template("account.html", counts=counts, favorites=favorites)
 
 
+@app.route("/account/favorite-stores")
+@login_required
+def favorite_stores():
+    favorites = supabase.get_favorite_stores(g.user["access_token"], g.user["id"])
+    return render_template("favorite_stores.html", favorites=favorites)
+
+
 @app.route("/account/profile", methods=["POST"])
 @login_required
 def update_account():
@@ -467,6 +474,19 @@ def wishlist():
 def delete_wishlist(item_id):
     supabase.delete_wishlist_item(g.user["access_token"], g.user["id"], item_id)
     flash("Carta eliminada de tu wishlist.", "success")
+    return redirect(url_for("wishlist"))
+
+
+@app.route("/wishlist/<item_id>/status", methods=["POST"])
+@login_required
+def update_wishlist_status(item_id):
+    supabase.update_wishlist_item(
+        g.user["access_token"],
+        g.user["id"],
+        item_id,
+        acquired=request.form.get("acquired") == "true",
+    )
+    flash("Estado de wishlist actualizado.", "success")
     return redirect(url_for("wishlist"))
 
 
@@ -542,6 +562,7 @@ def api_cart_event():
 def admin_dashboard():
     users = supabase.admin_users(request.args.get("q"))
     audit = supabase.admin_audit(100)
+    usage = supabase.admin_usage_metrics()
     metrics = {
         "users": len(users),
         "active": sum(user["status"] == "active" for user in users),
@@ -549,7 +570,9 @@ def admin_dashboard():
         "searches": sum(int(user["search_count"]) for user in users),
         "carts": sum(int(user["cart_event_count"]) for user in users),
     }
-    return render_template("admin.html", users=users, audit=audit, metrics=metrics)
+    return render_template(
+        "admin.html", users=users, audit=audit, metrics=metrics, usage=usage
+    )
 
 
 @app.route("/admin/users/<user_id>", methods=["POST"])
