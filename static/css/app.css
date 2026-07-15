@@ -139,7 +139,6 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink-950); font-weight: 750; letter-spacing
 .offer-table tbody tr:hover { background-color: var(--action-blue-soft); }
 .product-name { color: var(--ink-700); font-size: .88rem; }
 .best-price { display: inline-flex; align-items: center; gap: .3rem; color: var(--positive); font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
-.offer-mobile { display: none; }
 .offers-toggle { display: none; }
 
 .status-badge { display: inline-flex; align-items: center; gap: .32rem; padding: .27rem .55rem; border-radius: 999px; font-size: .73rem; line-height: 1.2; font-weight: 800; }
@@ -176,6 +175,12 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink-950); font-weight: 750; letter-spacing
 .metric-card--green .metric-card__icon { color: var(--positive); background: var(--positive-soft); }
 
 .item-list { display: grid; gap: .75rem; }
+.item-list .offer-card { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .35rem .75rem; padding: .8rem; border: 1px solid var(--border); border-radius: .7rem; }
+.item-list .offer-card .best-price { display: flex; margin-top: .15rem; }
+.item-list .offer-card--best { border-color: #a9d6bc; background: var(--positive-soft); }
+.item-list .offer-card__product { color: var(--ink-600); font-size: .8rem; grid-column: 1 / -1; }
+.item-list .offer-card__action { grid-column: 1 / -1; }
+.item-list .offer-card__action .btn { width: 100%; }
 .list-card { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.1rem; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 .list-card__main { display: flex; align-items: center; min-width: 0; gap: .85rem; }
 .list-card__icon { display: grid; place-items: center; flex: 0 0 2.6rem; width: 2.6rem; height: 2.6rem; color: var(--action-blue); background: var(--action-blue-soft); border-radius: .72rem; }
@@ -228,16 +233,20 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink-950); font-weight: 750; letter-spacing
   .card-result__header { flex-direction: column; }
   .card-result__body { display: block; }
   .card-art { float: left; width: 82px; margin: 0 1rem .7rem 0; }
-  .offer-desktop { display: none; }
-  .offer-mobile { display: grid; clear: both; gap: .6rem; padding-top: .5rem; }
-  .offer-mobile:not(.is-expanded) .offer-card--extra { display: none; }
-  .offers-toggle { display: block; width: 100%; }
-  .offer-card { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .35rem .75rem; padding: .8rem; border: 1px solid var(--border); border-radius: .7rem; }
-  .offer-card .best-price { display: flex; margin-top: .15rem; }
-  .offer-card--best { border-color: #a9d6bc; background: var(--positive-soft); }
-  .offer-card__product { color: var(--ink-600); font-size: .8rem; grid-column: 1 / -1; }
-  .offer-card__action { grid-column: 1 / -1; }
-  .offer-card__action .btn { width: 100%; }
+  .offer-list { clear: both; overflow: visible; padding-top: .5rem; }
+  .offer-table, .offer-table tbody { display: block; }
+  .offer-table thead { display: none; }
+  .offer-table tbody { display: grid; gap: .6rem; }
+  .offer-table tbody tr { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .35rem .75rem; padding: .8rem; border: 1px solid var(--border); border-radius: .7rem; }
+  .offer-table tbody tr:first-child { border-color: #a9d6bc; background: var(--positive-soft); }
+  .offer-table tbody tr:hover { background-color: var(--action-blue-soft); }
+  .offer-table tbody td { display: block; padding: 0; border: 0; }
+  .offer-table tbody td:nth-child(2) { grid-column: 1 / -1; color: var(--ink-600); font-size: .8rem; }
+  .offer-table tbody td:nth-child(3) { grid-column: 2; grid-row: 1; text-align: right !important; }
+  .offer-table tbody td:nth-child(4) { grid-column: 1 / -1; text-align: left !important; }
+  .offer-table tbody td:nth-child(4) .btn { width: 100%; }
+  .offer-list:not(.is-expanded) .offer-row--extra { display: none; }
+  .offers-toggle { display: block; width: 100%; margin-top: .6rem; }
   .list-card { align-items: flex-start; flex-direction: column; }
   .list-card__actions { width: 100%; }
   .list-card__actions .btn, .list-card__actions form { flex: 1; }

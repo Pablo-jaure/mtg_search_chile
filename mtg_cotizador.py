@@ -55,6 +55,9 @@ HEADERS = {
     "Accept-Language": "es-419,es;q=0.9,en;q=0.8",
 }
 
+SEARCH_CONCURRENCY = 8
+DETAIL_CONCURRENCY = 8
+
 # Tiendas que necesitan inspección manual (se muestran en tab de ayuda)
 TIENDAS_PENDIENTES_INSPECCION = {
     "BloodMoon Games":  "https://bloodmoongames.cl/?s=Lightning+Bolt&post_type=product",
@@ -144,23 +147,26 @@ def parse_shopify_json(r, carta, nombre_tienda, url) -> tuple[list, str]:
     return resultados, diag
 
 
-async def actualizar_precios_shopify(client, resultados: list) -> list:
+async def actualizar_precios_shopify(client, resultados: list, sem=None) -> list:
     """Reemplaza el precio base de búsqueda por el menor precio con stock real.
 
     Shopify Search entrega el mínimo histórico de todas las variantes, incluyendo
     variantes agotadas. El endpoint público ``producto.js`` contiene el stock y
     el precio vigente (en centavos) de cada variante.
     """
-    actualizados = []
-    for resultado in resultados:
+    async def actualizar(resultado):
         try:
             producto_url = resultado["Link"].split("?", 1)[0].rstrip("/") + ".js"
-            respuesta = await client.get(producto_url, headers=HEADERS, timeout=10.0)
+            if sem is None:
+                respuesta = await client.get(producto_url, headers=HEADERS, timeout=10.0)
+            else:
+                async with sem:
+                    respuesta = await client.get(producto_url, headers=HEADERS, timeout=10.0)
             respuesta.raise_for_status()
             variantes = respuesta.json().get("variants", [])
             disponibles = [v for v in variantes if v.get("available") and v.get("price") is not None]
             if not disponibles:
-                continue
+                return None
 
             variante = min(disponibles, key=lambda v: int(v["price"]))
             resultado["Precio"] = round(int(variante["price"]) / 100)
@@ -169,12 +175,14 @@ async def actualizar_precios_shopify(client, resultados: list) -> list:
             nombre_variante = variante.get("title", "").strip()
             if nombre_variante and nombre_variante.lower() != "default title":
                 resultado["Producto Encontrado"] += f" — {nombre_variante}"
-            actualizados.append(resultado)
+            return resultado
         except Exception:
             # Si una tienda bloquea el endpoint de variantes, se conserva el
             # resultado de búsqueda para no perder completamente el producto.
-            actualizados.append(resultado)
-    return actualizados
+            return resultado
+
+    actualizados = await asyncio.gather(*(actualizar(resultado) for resultado in resultados))
+    return [resultado for resultado in actualizados if resultado is not None]
 
 
 def _objetos_json(valor):
@@ -288,32 +296,35 @@ def _stock_y_precio_ficha(html: str) -> tuple[bool | None, int | None, dict | No
     return None, None, None
 
 
-async def verificar_fichas_html(client, resultados: list) -> tuple[list, int, int]:
+async def verificar_fichas_html(client, resultados: list, sem=None) -> tuple[list, int, int]:
     """Valida stock en fichas WooCommerce/Jumpseller y actualiza su precio."""
-    verificados, descartados, inconclusos = [], 0, 0
-    for resultado in resultados:
+    async def verificar(resultado):
         try:
-            respuesta = await client.get(resultado["Link"], headers=HEADERS, timeout=12.0)
+            if sem is None:
+                respuesta = await client.get(resultado["Link"], headers=HEADERS, timeout=12.0)
+            else:
+                async with sem:
+                    respuesta = await client.get(resultado["Link"], headers=HEADERS, timeout=12.0)
             if respuesta.status_code != 200:
-                inconclusos += 1
-                verificados.append(resultado)
-                continue
+                return resultado, 0, 1
             stock, precio, compra = _stock_y_precio_ficha(respuesta.text)
             if stock is False:
-                descartados += 1
-                continue
-            if stock is None:
-                inconclusos += 1
-            else:
+                return None, 1, 0
+            inconcluso = int(stock is None)
+            if stock is not None:
                 resultado["Stock Verificado"] = True
             if precio:
                 resultado["Precio"] = precio
             if compra and compra.get("product_id"):
                 resultado["WooCommerce Compra"] = compra
-            verificados.append(resultado)
+            return resultado, 0, inconcluso
         except Exception:
-            inconclusos += 1
-            verificados.append(resultado)
+            return resultado, 0, 1
+
+    respuestas = await asyncio.gather(*(verificar(resultado) for resultado in resultados))
+    verificados = [resultado for resultado, _, _ in respuestas if resultado is not None]
+    descartados = sum(descartado for _, descartado, _ in respuestas)
+    inconclusos = sum(inconcluso for _, _, inconcluso in respuestas)
     return verificados, descartados, inconclusos
 
 
@@ -540,7 +551,7 @@ def parse_scry_marketplace(r, carta, nombre_tienda, url) -> tuple[list, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Scraper asíncrono central
 # ─────────────────────────────────────────────────────────────────────────────
-async def buscar_en_tienda(client, sem, nombre_tienda, config, carta, callback=None):
+async def buscar_en_tienda(client, sem, nombre_tienda, config, carta, callback=None, detalle_sem=None):
     url = config["url_buscar"].format(carta=carta.replace(" ", "+"))
     log = {"Tienda": nombre_tienda, "Consulta": carta, "Estado HTTP": "En cola", "Diagnóstico": "En cola"}
 
@@ -559,7 +570,8 @@ async def buscar_en_tienda(client, sem, nombre_tienda, config, carta, callback=N
             if tipo == "shopify_api":
                 resultados, diag = parse_shopify_json(r, carta, nombre_tienda, url)
                 if resultados:
-                    resultados = await actualizar_precios_shopify(client, resultados)
+                    resultados = list({resultado["Link"]: resultado for resultado in resultados}.values())
+                    resultados = await actualizar_precios_shopify(client, resultados, detalle_sem)
                     diag = f"✅ {len(resultados)} resultado(s) con stock verificado"
                 # Fallback HTML automático cuando Cloudflare bloquea el JSON
                 if "Cloudflare" in diag:
@@ -574,13 +586,15 @@ async def buscar_en_tienda(client, sem, nombre_tienda, config, carta, callback=N
             elif tipo == "woocommerce":
                 resultados, diag = parse_woocommerce(r, carta, nombre_tienda, url)
                 if resultados:
-                    resultados, fuera_stock, inconclusos = await verificar_fichas_html(client, resultados)
+                    resultados = list({resultado["Link"]: resultado for resultado in resultados}.values())
+                    resultados, fuera_stock, inconclusos = await verificar_fichas_html(client, resultados, detalle_sem)
                     diag = (f"✅ {len(resultados)} resultado(s); {fuera_stock} sin stock descartado(s)"
                             f"; {inconclusos} no concluyente(s)")
             elif tipo == "jumpseller":
                 resultados, diag = parse_jumpseller(r, carta, nombre_tienda, url)
                 if resultados:
-                    resultados, fuera_stock, inconclusos = await verificar_fichas_html(client, resultados)
+                    resultados = list({resultado["Link"]: resultado for resultado in resultados}.values())
+                    resultados, fuera_stock, inconclusos = await verificar_fichas_html(client, resultados, detalle_sem)
                     diag = (f"✅ {len(resultados)} resultado(s); {fuera_stock} sin stock descartado(s)"
                             f"; {inconclusos} no concluyente(s)")
             elif tipo == "scry_marketplace":
@@ -622,7 +636,8 @@ async def obtener_info_scryfall(client, sem, nombre, callback=None):
 
 async def cotizar_en_paralelo(lista_cartas, contenedor_status, barra_progreso):
     limits = httpx.Limits(max_keepalive_connections=40, max_connections=100)
-    sem = asyncio.Semaphore(4)
+    sem = asyncio.Semaphore(SEARCH_CONCURRENCY)
+    detalle_sem = asyncio.Semaphore(DETAIL_CONCURRENCY)
     total = len(TIENDAS_CONFIG) * len(lista_cartas) + len(lista_cartas)
     completadas = 0
 
@@ -634,7 +649,7 @@ async def cotizar_en_paralelo(lista_cartas, contenedor_status, barra_progreso):
         contenedor_status.write(msg)
 
     async with httpx.AsyncClient(limits=limits, follow_redirects=True) as client:
-        tareas_tiendas  = [buscar_en_tienda(client, sem, n, c, carta, tick)
+        tareas_tiendas  = [buscar_en_tienda(client, sem, n, c, carta, tick, detalle_sem)
                            for carta in lista_cartas for n, c in TIENDAS_CONFIG.items()]
         tareas_scryfall = [obtener_info_scryfall(client, sem, carta, tick)
                            for carta in lista_cartas]

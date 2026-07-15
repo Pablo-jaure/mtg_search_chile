@@ -1,4 +1,5 @@
 import asyncio
+import gzip
 import hashlib
 import hmac
 import os
@@ -43,6 +44,7 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("FLASK_ENV") == "production" or bool(os.environ.get("RENDER")),
     MAX_CONTENT_LENGTH=1_000_000,
+    SEND_FILE_MAX_AGE_DEFAULT=3600,
 )
 
 supabase_config = SupabaseConfig(
@@ -115,6 +117,8 @@ def valid_csrf() -> bool:
 @app.before_request
 def load_request_user():
     g.user = None
+    if request.endpoint == "static":
+        return
     if supabase:
         token = request.cookies.get("sb_access_token", "")
         if token:
@@ -124,6 +128,32 @@ def load_request_user():
         exempt = request.endpoint in {"auth_session", "internal_price_tracker_check"}
         if not exempt and not valid_csrf():
             abort(400, "Token CSRF inválido o ausente")
+
+
+@app.after_request
+def compress_text_responses(response):
+    """Comprime HTML y recursos de texto cuando el navegador acepta gzip."""
+    if (
+        response.status_code != 200
+        or "gzip" not in request.headers.get("Accept-Encoding", "").lower()
+        or response.headers.get("Content-Encoding")
+        or response.headers.get("Content-Range")
+        or response.mimetype not in {"text/html", "text/css", "application/javascript"}
+    ):
+        return response
+
+    response.direct_passthrough = False
+    contenido = response.get_data()
+    if len(contenido) < 1024:
+        return response
+    comprimido = gzip.compress(contenido, compresslevel=5, mtime=0)
+    if len(comprimido) >= len(contenido):
+        return response
+
+    response.set_data(comprimido)
+    response.headers["Content-Encoding"] = "gzip"
+    response.vary.add("Accept-Encoding")
+    return response
 
 
 @app.context_processor
@@ -163,10 +193,11 @@ def admin_required(view):
 
 async def cotizar_web(cartas):
     limits = httpx.Limits(max_keepalive_connections=40, max_connections=100)
-    sem = asyncio.Semaphore(4)
+    sem = asyncio.Semaphore(SEARCH_CONCURRENCY)
+    detalle_sem = asyncio.Semaphore(DETAIL_CONCURRENCY)
     async with httpx.AsyncClient(limits=limits, follow_redirects=True) as client:
         tiendas = [
-            buscar_en_tienda(client, sem, nombre, config, carta)
+            buscar_en_tienda(client, sem, nombre, config, carta, detalle_sem=detalle_sem)
             for carta in cartas
             for nombre, config in TIENDAS_CONFIG.items()
         ]

@@ -32,7 +32,7 @@
 │        │                                            │
 │   ┌────▼────────────────────────────┐               │
 │   │  Scraping Engine (async httpx)  │               │
-│   │  - 23 stores, 4 concurrent     │               │
+│   │  - 23 stores, 8 concurrent     │               │
 │   │  - Shopify API + HTML fallback  │               │
 │   │  - WooCommerce HTML parsing     │               │
 │   │  - Jumpseller parsing           │               │
@@ -52,7 +52,7 @@
 
 1. **User inputs** a list of cards (plain text, supports Arena/MTGO/Moxfield formats)
 2. **Flask** parses the list and triggers `asyncio.run(cotizar_web())`
-3. **Scraping engine** creates 4 concurrent semaphores → one HTTP request per (card × store) pair → up to `23 × N` requests
+3. **Scraping engine** runs up to 8 store searches concurrently → one HTTP request per (card × store) pair → up to `23 × N` requests
 4. **Each scraper** (Shopify JSON / WooCommerce HTML / Jumpseller / Scry) extracts matching products, prices, and links
 5. **Stock verification** (async): for each found product, hits its detail page to confirm real availability and get actual lowest price + variant IDs
 6. **Scryfall** fetches card images and USD prices in parallel
@@ -157,7 +157,7 @@
 
 **Concurrency model:**
 - `httpx.AsyncClient` with `max_keepalive_connections=40, max_connections=100`
-- `asyncio.Semaphore(4)` limits concurrent requests to the same card/store
+- `asyncio.Semaphore(8)` limits concurrent searches and detail-page verification requests
 - All store × card requests fire simultaneously via `asyncio.gather()`
 
 ### 4.3 Supabase Store (`supabase_store.py`)
@@ -248,7 +248,7 @@ PORT=                      # Server port (Render sets this automatically)
 | **Last-admin lock** | Cannot demote/delete the last active admin |
 | **HMAC signatures** | Internal endpoints use timestamp + nonce + HMAC-SHA256 |
 | **CORS** | Origin validation on auth session endpoint |
-| **Rate limits** | Scraper semaphore (4 concurrent) + 100-card max per search |
+| **Rate limits** | Search/detail semaphores (8 concurrent) + 100-card max per search |
 | **Input validation** | Card names validated via regex parsing; Supabase params use eq. syntax |
 
 ---

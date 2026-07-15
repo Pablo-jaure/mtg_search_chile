@@ -83,17 +83,17 @@
           {% endif %}
         </header>
         <div class="card-result__body">
-          {% if info.get('imagen') %}<img class="card-art" src="{{ info.imagen }}" alt="Carta {{ info.get('nombre_real', carta) }}" loading="lazy">
+          {% if info.get('imagen') %}<img class="card-art" src="{{ info.imagen }}" alt="Carta {{ info.get('nombre_real', carta) }}" width="488" height="680" loading="{{ 'eager' if loop.first else 'lazy' }}"{% if loop.first %} fetchpriority="high"{% endif %}>
           {% else %}<div class="card-art card-art-placeholder" role="img" aria-label="Imagen no disponible"><i class="bi bi-image"></i></div>{% endif %}
 
           <div>
           {% if offers %}
-            <div class="table-responsive offer-desktop">
+            <div class="table-responsive offer-list" data-offers>
               <table class="table align-middle offer-table">
                 <thead><tr><th scope="col">Tienda</th><th scope="col">Producto encontrado</th><th scope="col" class="text-end">Precio</th><th scope="col"><span class="visually-hidden">Acción</span></th></tr></thead>
                 <tbody>
                 {% for fila in offers %}
-                  <tr>
+                  <tr class="{% if loop.index > 8 %}offer-row--extra{% endif %}">
                     <td><strong>{{ fila['Tienda'] }}</strong>{% if loop.first %}<br><span class="best-price"><i class="bi bi-award" aria-hidden="true"></i>Mejor precio</span>{% endif %}</td>
                     <td class="product-name">{{ fila['Producto Encontrado'] }}</td>
                     <td class="price price--large text-end">${{ '{:,.0f}'.format(fila['Precio']).replace(',', '.') }}</td>
@@ -102,16 +102,6 @@
                 {% endfor %}
                 </tbody>
               </table>
-            </div>
-            <div class="offer-mobile">
-              {% for fila in offers %}
-              <div class="offer-card {% if loop.first %}offer-card--best{% endif %} {% if loop.index > 8 %}offer-card--extra{% endif %}">
-                <div><strong>{{ fila['Tienda'] }}</strong>{% if loop.first %}<div class="best-price">Mejor precio</div>{% endif %}</div>
-                <div class="price price--large">${{ '{:,.0f}'.format(fila['Precio']).replace(',', '.') }}</div>
-                <div class="offer-card__product">{{ fila['Producto Encontrado'] }}</div>
-                <div class="offer-card__action"><a class="btn btn-sm {% if loop.first %}btn-success{% else %}btn-outline-primary{% endif %} product-link" href="{{ fila['Link'] }}" target="_blank" rel="noopener noreferrer" data-event='{{ {"search_run_id": search_run_id, "store_slug": fila["Store Slug"], "platform": "product", "event_type": "product_opened", "estimated_total_clp": fila["Precio"], "card_count": 1, "items": [{"card": carta, "product": fila["Producto Encontrado"], "price_clp": fila["Precio"]}], "destination_url": fila["Link"]}|tojson }}'>Ver oferta <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a></div>
-              </div>
-              {% endfor %}
               {% if offers|length > 8 %}<button class="btn btn-outline-primary offers-toggle" type="button" data-offers-toggle data-hidden-count="{{ offers|length - 8 }}" aria-expanded="false"><i class="bi bi-chevron-down" aria-hidden="true"></i> Mostrar {{ offers|length - 8 }} ofertas más</button>{% endif %}
             </div>
           {% else %}
@@ -202,7 +192,7 @@ document.getElementById('favorite-filter')?.addEventListener('change', event => 
   document.querySelectorAll('[data-store-row]').forEach(row => row.hidden = event.target.checked && row.dataset.favorite !== 'true');
 });
 document.querySelectorAll('[data-offers-toggle]').forEach(button => button.addEventListener('click', () => {
-  const container = button.closest('.offer-mobile'); const expanded = container.classList.toggle('is-expanded');
+  const container = button.closest('[data-offers]'); const expanded = container.classList.toggle('is-expanded');
   button.setAttribute('aria-expanded', String(expanded));
   button.innerHTML = expanded ? '<i class="bi bi-chevron-up" aria-hidden="true"></i> Mostrar menos' : `<i class="bi bi-chevron-down" aria-hidden="true"></i> Mostrar ${button.dataset.hiddenCount} ofertas más`;
 }));

@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import hmac
 import json
@@ -66,6 +67,36 @@ def test_public_quote_page_and_protected_area(monkeypatch):
     assert client.get("/wishlist").status_code == 302
 
 
+def test_static_assets_skip_remote_auth_and_are_cacheable(monkeypatch):
+    store = FakeSupabase()
+    store.auth_calls = 0
+    original_authenticate = store.authenticate
+
+    def authenticate(token):
+        store.auth_calls += 1
+        return original_authenticate(token)
+
+    store.authenticate = authenticate
+    monkeypatch.setattr(module, "supabase", store)
+    client = module.app.test_client()
+    logged_in(client)
+
+    response = client.get("/static/css/app.css")
+
+    assert response.status_code == 200
+    assert store.auth_calls == 0
+    assert response.cache_control.max_age == 3600
+
+
+def test_text_responses_are_gzip_compressed_when_supported(monkeypatch):
+    monkeypatch.setattr(module, "supabase", None)
+    response = module.app.test_client().get("/", headers={"Accept-Encoding": "gzip"})
+
+    assert response.headers["Content-Encoding"] == "gzip"
+    assert "Accept-Encoding" in response.headers.get("Vary", "")
+    assert b"MTG Search Chile" in gzip.decompress(response.data)
+
+
 def test_guest_can_quote_without_persistence(monkeypatch):
     async def fake_quote(_cards):
         result = {"Tienda": "Card Souls", "Carta Buscada": "Lightning Bolt",
@@ -80,7 +111,8 @@ def test_guest_can_quote_without_persistence(monkeypatch):
     response = client.post("/", data={"csrf_token": token, "lista": "1x Lightning Bolt"})
     assert response.status_code == 200
     assert b"Lightning Bolt NM" in response.data
-    assert b"offer-mobile" in response.data
+    assert b"offer-list" in response.data
+    assert len(BeautifulSoup(response.data, "html.parser").select("a.product-link")) == 1
     assert b"Mejor precio" in response.data
 
 
