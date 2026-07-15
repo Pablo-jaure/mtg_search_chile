@@ -23,8 +23,12 @@ sql_paths = []
 
 [auth]
 enabled = true
-site_url = "http://127.0.0.1:5000"
-additional_redirect_urls = ["http://127.0.0.1:5000/auth/callback"]
+site_url = "https://mtg-search-chile.onrender.com"
+additional_redirect_urls = [
+  "https://mtg-search-chile.onrender.com/auth/callback",
+  "http://127.0.0.1:5000/auth/callback",
+  "http://localhost:5000/auth/callback",
+]
 jwt_expiry = 3600
 enable_signup = true
 enable_anonymous_sign_ins = false
