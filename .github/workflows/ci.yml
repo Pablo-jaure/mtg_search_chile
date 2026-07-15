@@ -36,7 +36,8 @@ jobs:
           python -c "from app import app;
           response = app.test_client().get('/');
           assert response.status_code == 200;
-          assert b'MTG Chile Cotizador' in response.data"
+          assert b'MTG Search Chile' in response.data;
+          assert 'Encuentra tus cartas al mejor precio'.encode() in response.data"
 
       - name: Run tests
         run: python -m pytest -q

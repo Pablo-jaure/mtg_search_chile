@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(17);
+select plan(19);
 
 select ok(
   (select bool_and(relrowsecurity)
@@ -38,6 +38,14 @@ select ok(
 select ok(
   not has_column_privilege('authenticated', 'public.wishlist_items', 'last_price_clp', 'INSERT,UPDATE'),
   'authenticated clients cannot write internal tracker state'
+);
+select ok(
+  has_table_privilege('service_role', 'public.price_tracker_runs', 'SELECT')
+  and has_table_privilege('service_role', 'public.price_alert_deliveries', 'SELECT')
+  and has_table_privilege('service_role', 'public.price_alert_deliveries', 'INSERT')
+  and has_table_privilege('service_role', 'public.price_alert_deliveries', 'UPDATE')
+  and has_table_privilege('service_role', 'public.price_alert_deliveries', 'DELETE'),
+  'service role can maintain tracker queue and delivery outbox'
 );
 select throws_ok(
   $$update public.profiles set role = 'admin' where id = auth.uid()$$,
