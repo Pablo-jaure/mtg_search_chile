@@ -39,7 +39,7 @@ jobs:
           assert b'MTG Chile Cotizador' in response.data"
 
       - name: Run tests
-        run: pytest -q
+        run: python -m pytest -q
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
