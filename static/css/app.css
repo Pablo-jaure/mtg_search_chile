@@ -127,7 +127,7 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink-950); font-weight: 750; letter-spacing
 .card-result__title { margin: 0; font-size: 1.18rem; }
 .card-result__meta { display: flex; flex-wrap: wrap; gap: .45rem .8rem; color: var(--ink-600); font-size: .83rem; margin-top: .3rem; }
 .card-result__body { display: grid; grid-template-columns: 130px minmax(0,1fr); gap: 1.15rem; padding: 1.15rem; }
-.card-art { width: 130px; aspect-ratio: 488/680; object-fit: cover; border-radius: .7rem; background: var(--surface-muted); box-shadow: 0 8px 20px rgba(11,23,39,.15); }
+.card-art { width: 130px; height: auto; aspect-ratio: 488/680; object-fit: cover; border-radius: .7rem; background: var(--surface-muted); box-shadow: 0 8px 20px rgba(11,23,39,.15); }
 .card-art-placeholder { display: grid; place-items: center; color: var(--ink-400); border: 1px dashed var(--border-strong); box-shadow: none; }
 .card-art-placeholder i { font-size: 2rem; }
 .price { white-space: nowrap; font-weight: 800; font-variant-numeric: tabular-nums; }

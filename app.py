@@ -195,9 +195,17 @@ async def cotizar_web(cartas):
     limits = httpx.Limits(max_keepalive_connections=40, max_connections=100)
     sem = asyncio.Semaphore(SEARCH_CONCURRENCY)
     detalle_sem = asyncio.Semaphore(DETAIL_CONCURRENCY)
+    detalle_tienda_sems = {
+        nombre: asyncio.Semaphore(DETAIL_CONCURRENCY_PER_STORE)
+        for nombre in TIENDAS_CONFIG
+    }
     async with httpx.AsyncClient(limits=limits, follow_redirects=True) as client:
         tiendas = [
-            buscar_en_tienda(client, sem, nombre, config, carta, detalle_sem=detalle_sem)
+            buscar_en_tienda(
+                client, sem, nombre, config, carta,
+                detalle_sem=detalle_sem,
+                tienda_detalle_sem=detalle_tienda_sems[nombre],
+            )
             for carta in cartas
             for nombre, config in TIENDAS_CONFIG.items()
         ]

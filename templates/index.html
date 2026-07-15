@@ -83,7 +83,7 @@
           {% endif %}
         </header>
         <div class="card-result__body">
-          {% if info.get('imagen') %}<img class="card-art" src="{{ info.imagen }}" alt="Carta {{ info.get('nombre_real', carta) }}" width="488" height="680" loading="{{ 'eager' if loop.first else 'lazy' }}"{% if loop.first %} fetchpriority="high"{% endif %}>
+          {% if info.get('imagen') %}<img class="card-art" src="{{ info.imagen }}" alt="Carta {{ info.get('nombre_real', carta) }}" width="488" loading="{{ 'eager' if loop.first else 'lazy' }}"{% if loop.first %} fetchpriority="high"{% endif %}>
           {% else %}<div class="card-art card-art-placeholder" role="img" aria-label="Imagen no disponible"><i class="bi bi-image"></i></div>{% endif %}
 
           <div>
