@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}Detalle de búsqueda{% endblock %}{% block content %}
+<h1 class="h3">Búsqueda del {{ detail.run.created_at }}</h1><pre class="bg-light border rounded p-3">{{ detail.run.query_text }}</pre>
+{% for card in detail.cards %}<div class="card mb-3 shadow-sm"><div class="card-header"><strong>{{ card.canonical_name or card.searched_name }}</strong></div><div class="table-responsive"><table class="table table-sm mb-0"><tbody>{% for result in card.search_results %}<tr><td>{{ result.stores.name if result.stores else '' }}</td><td>{{ result.product_name }}</td><td>${{ '{:,.0f}'.format(result.price_clp).replace(',', '.') }}</td><td><a href="{{ result.product_url }}" target="_blank" rel="noopener">Abrir</a></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}
+{% endblock %}

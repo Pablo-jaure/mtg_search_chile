@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Iniciando sesión{% endblock %}
+{% block content %}<div class="card mx-auto shadow-sm" style="max-width:32rem"><div class="card-body p-5 text-center"><div class="spinner-border mb-3"></div><h1 class="h4">Completando inicio de sesión…</h1><p id="auth-status" class="text-muted">Estamos validando tu cuenta Google.</p></div></div>{% endblock %}
+{% block scripts %}<script type="module">
+const status=document.getElementById('auth-status');
+const wait=()=>new Promise(resolve=>setTimeout(resolve,100));
+while(!window.mtgSupabase) await wait();
+const {data,error}=await window.mtgSupabase.auth.getSession();
+if(error||!data.session){status.textContent=error?.message||'No fue posible obtener la sesión.';}else{
+  try{await window.syncServerSession(data.session.access_token);location.replace({{ url_for('account')|tojson }});}catch(e){status.textContent=e.message;}
+}
+</script>{% endblock %}
